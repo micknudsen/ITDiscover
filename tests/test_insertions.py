@@ -36,6 +36,31 @@ def test_extracts_internal_in_frame_insertion() -> None:
     ]
 
 
+def test_extracts_multiple_insertions_from_one_alignment() -> None:
+    alignment = Alignment(
+        read_id="read-1",
+        read_sequence="AAACCCCCCGGGTTTTTTAAA",
+        aligned_read="AAACCCCCCGGGTTTTTTAAA",
+        aligned_reference="AAA------GGG------AAA",
+        sense="forward",
+    )
+
+    assert extract_insertions(alignment) == [
+        Insertion(
+            read_id="read-1",
+            start=2,
+            sequence="CCCCCC",
+            sense="forward",
+        ),
+        Insertion(
+            read_id="read-1",
+            start=5,
+            sequence="TTTTTT",
+            sense="forward",
+        ),
+    ]
+
+
 def test_filters_short_insertions_by_default() -> None:
     alignment = Alignment(
         read_id="read-1",
