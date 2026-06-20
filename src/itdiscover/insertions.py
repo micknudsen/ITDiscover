@@ -1,0 +1,123 @@
+"""Insertion models and extraction from read-to-reference alignments."""
+
+from dataclasses import dataclass
+from typing import Literal
+
+Sense = Literal["forward", "reverse"]
+
+
+@dataclass(frozen=True)
+class Alignment:
+    """A read aligned to a wild-type amplicon reference."""
+
+    read_id: str
+    read_sequence: str
+    aligned_read: str
+    aligned_reference: str
+    sense: Sense
+    count: int = 1
+
+    def __post_init__(self) -> None:
+        if len(self.aligned_read) != len(self.aligned_reference):
+            raise ValueError("aligned_read and aligned_reference must have equal length")
+        if self.count < 1:
+            raise ValueError("count must be at least 1")
+
+
+@dataclass(frozen=True)
+class Insertion:
+    """An insertion relative to the wild-type amplicon reference."""
+
+    read_id: str
+    start: int
+    sequence: str
+    sense: Sense
+    count: int = 1
+    trailing: bool = False
+
+    @property
+    def length(self) -> int:
+        """Return the inserted sequence length."""
+        return len(self.sequence)
+
+
+def extract_insertions(
+    alignment: Alignment,
+    *,
+    min_length: int = 6,
+    require_in_frame: bool = True,
+) -> list[Insertion]:
+    """Extract insertions from an aligned read/reference pair.
+
+    Insertions are runs where the aligned reference contains gaps and the
+    aligned read contains bases. Coordinates are zero-based and `start` is the
+    reference base immediately before the insertion. A leading insertion uses
+    `start == -1`.
+    """
+    if min_length < 1:
+        raise ValueError("min_length must be at least 1")
+
+    insertions: list[Insertion] = []
+    ref_pos = -1
+    i = 0
+
+    while i < len(alignment.aligned_reference):
+        read_base = alignment.aligned_read[i]
+        ref_base = alignment.aligned_reference[i]
+
+        if ref_base != "-":
+            ref_pos += 1
+            i += 1
+            continue
+
+        if read_base == "-":
+            i += 1
+            continue
+
+        start = ref_pos
+        insert_bases: list[str] = []
+        insert_start_index = i
+        while (
+            i < len(alignment.aligned_reference)
+            and alignment.aligned_reference[i] == "-"
+            and alignment.aligned_read[i] != "-"
+        ):
+            insert_bases.append(alignment.aligned_read[i])
+            i += 1
+
+        sequence = "".join(insert_bases)
+        trailing = insert_start_index == 0 or i == len(alignment.aligned_reference)
+        if _passes_insertion_filters(
+            sequence,
+            min_length=min_length,
+            trailing=trailing,
+            require_in_frame=require_in_frame,
+        ):
+            insertions.append(
+                Insertion(
+                    read_id=alignment.read_id,
+                    start=start,
+                    sequence=sequence,
+                    sense=alignment.sense,
+                    count=alignment.count,
+                    trailing=trailing,
+                )
+            )
+
+    return insertions
+
+
+def _passes_insertion_filters(
+    sequence: str,
+    *,
+    min_length: int,
+    trailing: bool,
+    require_in_frame: bool,
+) -> bool:
+    if len(sequence) < min_length:
+        return False
+    if "N" in sequence.upper():
+        return False
+    if require_in_frame and not trailing and len(sequence) % 3 != 0:
+        return False
+    return True
