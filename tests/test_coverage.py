@@ -15,7 +15,7 @@ def test_covered_reference_positions_excludes_insertions_and_deletions() -> None
         read_sequence="AACCCT",
         aligned_read="AA---C-T",
         aligned_reference="AAGGG-CT",
-        sense="forward",
+        direction="forward",
     )
 
     assert covered_reference_positions(alignment) == {0, 1, 6}
@@ -27,14 +27,14 @@ def test_internal_site_requires_coverage_on_both_sides() -> None:
         read_sequence="AAACCC",
         aligned_read="AAACCC",
         aligned_reference="AAACCC",
-        sense="forward",
+        direction="forward",
     )
     deleted_right_side = Alignment(
         read_id="deleted",
         read_sequence="AAACC",
         aligned_read="AAA-CC",
         aligned_reference="AAACCC",
-        sense="forward",
+        direction="forward",
     )
 
     assert spans_insertion_site(spanning, 2)
@@ -47,7 +47,7 @@ def test_edge_sites_require_terminal_reference_base_coverage() -> None:
         read_sequence="AACCC",
         aligned_read="-AACCC",
         aligned_reference="AAACCC",
-        sense="forward",
+        direction="forward",
     )
 
     assert not spans_insertion_site(alignment, -1)
@@ -61,7 +61,7 @@ def test_interbase_coverage_is_weighted_by_alignment_count() -> None:
             read_sequence="AAACCC",
             aligned_read="AAACCC",
             aligned_reference="AAACCC",
-            sense="forward",
+            direction="forward",
             count=3,
         ),
         Alignment(
@@ -69,7 +69,7 @@ def test_interbase_coverage_is_weighted_by_alignment_count() -> None:
             read_sequence="CCC",
             aligned_read="---CCC",
             aligned_reference="AAACCC",
-            sense="reverse",
+            direction="reverse",
             count=2,
         ),
     ]
@@ -91,7 +91,7 @@ def test_spans_insertion_site_rejects_out_of_range_site() -> None:
         read_sequence="AAA",
         aligned_read="AAA",
         aligned_reference="AAA",
-        sense="forward",
+        direction="forward",
     )
 
     with pytest.raises(ValueError, match="outside"):

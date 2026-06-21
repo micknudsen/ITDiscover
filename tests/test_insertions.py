@@ -10,7 +10,7 @@ def test_alignment_requires_equal_aligned_lengths() -> None:
             read_sequence="ACGT",
             aligned_read="ACGT",
             aligned_reference="ACG",
-            sense="forward",
+            direction="forward",
         )
 
 
@@ -20,7 +20,7 @@ def test_extracts_internal_in_frame_insertion() -> None:
         read_sequence="AAACCCCCCGGGTTT",
         aligned_read="AAACCCCCCGGGTTT",
         aligned_reference="AAA------GGGTTT",
-        sense="forward",
+        direction="forward",
         count=4,
     )
 
@@ -29,7 +29,7 @@ def test_extracts_internal_in_frame_insertion() -> None:
             read_id="read-1",
             start=2,
             sequence="CCCCCC",
-            sense="forward",
+            direction="forward",
             count=4,
             trailing=False,
         )
@@ -42,7 +42,7 @@ def test_extracts_multiple_insertions_from_one_alignment() -> None:
         read_sequence="AAACCCCCCGGGTTTTTTAAA",
         aligned_read="AAACCCCCCGGGTTTTTTAAA",
         aligned_reference="AAA------GGG------AAA",
-        sense="forward",
+        direction="forward",
     )
 
     assert extract_insertions(alignment) == [
@@ -50,13 +50,13 @@ def test_extracts_multiple_insertions_from_one_alignment() -> None:
             read_id="read-1",
             start=2,
             sequence="CCCCCC",
-            sense="forward",
+            direction="forward",
         ),
         Insertion(
             read_id="read-1",
             start=5,
             sequence="TTTTTT",
-            sense="forward",
+            direction="forward",
         ),
     ]
 
@@ -67,7 +67,7 @@ def test_filters_short_insertions_by_default() -> None:
         read_sequence="AAACCGGGTTT",
         aligned_read="AAACCGGGTTT",
         aligned_reference="AAA--GGGTTT",
-        sense="forward",
+        direction="forward",
     )
 
     assert extract_insertions(alignment) == []
@@ -76,7 +76,7 @@ def test_filters_short_insertions_by_default() -> None:
             read_id="read-1",
             start=2,
             sequence="CC",
-            sense="forward",
+            direction="forward",
         )
     ]
 
@@ -87,7 +87,7 @@ def test_filters_internal_out_of_frame_insertions() -> None:
         read_sequence="AAACCCCGGGTTT",
         aligned_read="AAACCCCGGGTTT",
         aligned_reference="AAA----GGGTTT",
-        sense="forward",
+        direction="forward",
     )
 
     assert extract_insertions(alignment, min_length=4) == []
@@ -96,7 +96,7 @@ def test_filters_internal_out_of_frame_insertions() -> None:
             read_id="read-1",
             start=2,
             sequence="CCCC",
-            sense="forward",
+            direction="forward",
         )
     ]
 
@@ -107,7 +107,7 @@ def test_allows_out_of_frame_trailing_insertions() -> None:
         read_sequence="CCCCAAA",
         aligned_read="CCCCAAA",
         aligned_reference="----AAA",
-        sense="reverse",
+        direction="reverse",
     )
 
     assert extract_insertions(alignment, min_length=4) == [
@@ -115,7 +115,7 @@ def test_allows_out_of_frame_trailing_insertions() -> None:
             read_id="read-1",
             start=-1,
             sequence="CCCC",
-            sense="reverse",
+            direction="reverse",
             trailing=True,
         )
     ]
@@ -127,7 +127,7 @@ def test_filters_insertions_with_ambiguous_bases() -> None:
         read_sequence="AAACNCGGGTTT",
         aligned_read="AAACNCGGGTTT",
         aligned_reference="AAA---GGGTTT",
-        sense="forward",
+        direction="forward",
     )
 
     assert extract_insertions(alignment, min_length=3) == []

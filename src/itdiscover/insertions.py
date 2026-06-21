@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-Sense = Literal["forward", "reverse"]
+Direction = Literal["forward", "reverse"]
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class Alignment:
     read_sequence: str
     aligned_read: str
     aligned_reference: str
-    sense: Sense
+    direction: Direction
     count: int = 1
 
     def __post_init__(self) -> None:
@@ -31,7 +31,7 @@ class Insertion:
     read_id: str
     start: int
     sequence: str
-    sense: Sense
+    direction: Direction
     count: int = 1
     trailing: bool = False
 
@@ -98,7 +98,7 @@ def extract_insertions(
                     read_id=alignment.read_id,
                     start=start,
                     sequence=sequence,
-                    sense=alignment.sense,
+                    direction=alignment.direction,
                     count=alignment.count,
                     trailing=trailing,
                 )

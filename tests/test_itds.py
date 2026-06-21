@@ -7,7 +7,7 @@ def test_classifies_exact_upstream_tandem_duplication() -> None:
         read_id="read-1",
         start=8,
         sequence="CCCGGG",
-        sense="forward",
+        direction="forward",
         count=3,
     )
 
@@ -24,7 +24,7 @@ def test_classifies_exact_downstream_tandem_duplication() -> None:
         read_id="read-1",
         start=2,
         sequence="CCCGGG",
-        sense="reverse",
+        direction="reverse",
     )
 
     assert classify_exact_itd(insertion, "AAACCCGGGTTT") == ITD(
@@ -40,7 +40,7 @@ def test_prefers_upstream_match_when_both_adjacent_segments_match() -> None:
         read_id="read-1",
         start=5,
         sequence="AAA",
-        sense="forward",
+        direction="forward",
     )
 
     assert classify_exact_itd(insertion, "AAAAAA") == ITD(
@@ -56,7 +56,7 @@ def test_does_not_classify_non_adjacent_reference_match() -> None:
         read_id="read-1",
         start=2,
         sequence="TTT",
-        sense="forward",
+        direction="forward",
     )
 
     assert classify_exact_itd(insertion, "AAACCCGGGTTT") is None
@@ -67,7 +67,7 @@ def test_does_not_classify_sequence_absent_from_reference() -> None:
         read_id="read-1",
         start=2,
         sequence="GGGGGG",
-        sense="forward",
+        direction="forward",
     )
 
     assert classify_exact_itd(insertion, "AAACCCGGGTTT") is None
@@ -79,7 +79,7 @@ def test_itd_reports_inclusive_tandem_end_and_length() -> None:
             read_id="read-1",
             start=8,
             sequence="CCCGGG",
-            sense="forward",
+            direction="forward",
         ),
         tandem_start=3,
         tandem_sequence="CCCGGG",
