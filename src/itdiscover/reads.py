@@ -4,8 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .insertions import Direction
-
-_DNA_COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
+from .sequences import reverse_complement, validate_sequence
 
 
 @dataclass(frozen=True)
@@ -21,6 +20,7 @@ class SequencingRead:
     def __post_init__(self) -> None:
         if len(self.sequence) != len(self.qualities):
             raise ValueError("sequence and qualities must have equal length")
+        validate_sequence(self.sequence)
         if self.count < 1:
             raise ValueError("count must be at least 1")
 
@@ -35,11 +35,6 @@ class SequencingRead:
         if not self.qualities:
             return 0.0
         return sum(self.qualities) / len(self.qualities)
-
-
-def reverse_complement(sequence: str) -> str:
-    """Return the reverse complement of a DNA sequence."""
-    return sequence.translate(_DNA_COMPLEMENT)[::-1]
 
 
 def orient_read(
@@ -58,13 +53,13 @@ def orient_read(
     if direction == "forward":
         return SequencingRead(
             read_id=read_id,
-            sequence=sequence.upper(),
+            sequence=sequence,
             qualities=qualities,
             direction=direction,
         )
     return SequencingRead(
         read_id=read_id,
-        sequence=reverse_complement(sequence).upper(),
+        sequence=reverse_complement(sequence),
         qualities=tuple(reversed(qualities)),
         direction=direction,
     )
@@ -75,9 +70,9 @@ def trim_terminal_ns(read: SequencingRead) -> SequencingRead:
     start = 0
     end = len(read.sequence)
 
-    while start < end and read.sequence[start].upper() == "N":
+    while start < end and read.sequence[start] == "N":
         start += 1
-    while end > start and read.sequence[end - 1].upper() == "N":
+    while end > start and read.sequence[end - 1] == "N":
         end -= 1
 
     return SequencingRead(

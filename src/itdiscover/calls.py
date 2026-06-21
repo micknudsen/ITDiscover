@@ -60,7 +60,7 @@ def call_exact_itds(
 def _itd_call_key(itd: ITD) -> ITDCallKey:
     return (
         itd.tandem_start,
-        itd.tandem_sequence.upper(),
+        itd.tandem_sequence,
         itd.insertion.trailing,
     )
 

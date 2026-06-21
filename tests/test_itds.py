@@ -1,3 +1,5 @@
+import pytest
+
 from itdiscover.insertions import Insertion
 from itdiscover.itds import ITD, classify_exact_itd
 
@@ -71,6 +73,18 @@ def test_does_not_classify_sequence_absent_from_reference() -> None:
     )
 
     assert classify_exact_itd(insertion, "AAACCCGGGTTT") is None
+
+
+def test_classify_exact_itd_rejects_lowercase_reference() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGG",
+        direction="forward",
+    )
+
+    with pytest.raises(ValueError, match="reference contains invalid bases"):
+        classify_exact_itd(insertion, "AAAcccGGGTTT")
 
 
 def test_itd_reports_inclusive_tandem_end_and_length() -> None:

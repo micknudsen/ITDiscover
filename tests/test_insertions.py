@@ -14,6 +14,38 @@ def test_alignment_requires_equal_aligned_lengths() -> None:
         )
 
 
+def test_alignment_rejects_lowercase_bases() -> None:
+    with pytest.raises(ValueError, match="read_sequence contains invalid bases"):
+        Alignment(
+            read_id="read-1",
+            read_sequence="ACgT",
+            aligned_read="ACGT",
+            aligned_reference="ACGT",
+            direction="forward",
+        )
+
+
+def test_alignment_rejects_invalid_alignment_characters() -> None:
+    with pytest.raises(ValueError, match="aligned_read contains invalid bases"):
+        Alignment(
+            read_id="read-1",
+            read_sequence="ACGT",
+            aligned_read="ACXT",
+            aligned_reference="ACGT",
+            direction="forward",
+        )
+
+
+def test_insertion_rejects_lowercase_bases() -> None:
+    with pytest.raises(ValueError, match="sequence contains invalid bases"):
+        Insertion(
+            read_id="read-1",
+            start=2,
+            sequence="ACgT",
+            direction="forward",
+        )
+
+
 def test_extracts_internal_in_frame_insertion() -> None:
     alignment = Alignment(
         read_id="read-1",

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .insertions import Insertion
+from .sequences import validate_sequence
 
 TandemOrientation = Literal["upstream", "downstream"]
 
@@ -35,8 +36,8 @@ def classify_exact_itd(insertion: Insertion, reference: str) -> ITD | None:
     adjacent upstream or downstream WT reference segment. Fuzzy matching can be
     layered on later without changing the call model.
     """
-    reference = reference.upper()
-    sequence = insertion.sequence.upper()
+    _validate_reference(reference)
+    sequence = insertion.sequence
     if not sequence:
         return None
 
@@ -64,3 +65,7 @@ def classify_exact_itd(insertion: Insertion, reference: str) -> ITD | None:
             )
 
     return None
+
+
+def _validate_reference(reference: str) -> None:
+    validate_sequence(reference, field_name="reference")

@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from .sequences import VALID_ALIGNMENT_CHARS, validate_sequence
+
 Direction = Literal["forward", "reverse"]
 
 
@@ -20,6 +22,17 @@ class Alignment:
     def __post_init__(self) -> None:
         if len(self.aligned_read) != len(self.aligned_reference):
             raise ValueError("aligned_read and aligned_reference must have equal length")
+        validate_sequence(self.read_sequence, field_name="read_sequence")
+        validate_sequence(
+            self.aligned_read,
+            valid_chars=VALID_ALIGNMENT_CHARS,
+            field_name="aligned_read",
+        )
+        validate_sequence(
+            self.aligned_reference,
+            valid_chars=VALID_ALIGNMENT_CHARS,
+            field_name="aligned_reference",
+        )
         if self.count < 1:
             raise ValueError("count must be at least 1")
 
@@ -34,6 +47,11 @@ class Insertion:
     direction: Direction
     count: int = 1
     trailing: bool = False
+
+    def __post_init__(self) -> None:
+        validate_sequence(self.sequence)
+        if self.count < 1:
+            raise ValueError("count must be at least 1")
 
     @property
     def length(self) -> int:
@@ -116,7 +134,7 @@ def _passes_insertion_filters(
 ) -> bool:
     if len(sequence) < min_length:
         return False
-    if "N" in sequence.upper():
+    if "N" in sequence:
         return False
     # Trailing insertions may be partial observations clipped by the read edge,
     # so only fully internal insertions are required to be in-frame here.

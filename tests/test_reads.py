@@ -6,9 +6,9 @@ from itdiscover.reads import (
     orient_read,
     passes_read_filters,
     preprocess_reads,
-    reverse_complement,
     trim_terminal_ns,
 )
+from itdiscover.sequences import reverse_complement
 
 
 def test_sequencing_read_requires_quality_for_each_base() -> None:
@@ -21,14 +21,25 @@ def test_sequencing_read_requires_quality_for_each_base() -> None:
         )
 
 
-def test_reverse_complement_preserves_ambiguous_bases() -> None:
-    assert reverse_complement("ACGTNacgtn") == "nacgtNACGT"
+def test_sequencing_read_rejects_lowercase_bases() -> None:
+    with pytest.raises(ValueError, match="invalid bases"):
+        SequencingRead(
+            read_id="read-1",
+            sequence="ACgT",
+            qualities=(30, 30, 30, 30),
+            direction="forward",
+        )
+
+
+def test_reverse_complement_rejects_lowercase_bases() -> None:
+    with pytest.raises(ValueError, match="invalid bases"):
+        reverse_complement("ACgT")
 
 
 def test_orient_read_keeps_forward_reads_as_is() -> None:
     read = orient_read(
         read_id="r1",
-        sequence="acgtn",
+        sequence="ACGTN",
         qualities=(10, 20, 30, 40, 35),
         direction="forward",
     )
@@ -39,6 +50,16 @@ def test_orient_read_keeps_forward_reads_as_is() -> None:
         qualities=(10, 20, 30, 40, 35),
         direction="forward",
     )
+
+
+def test_orient_read_rejects_lowercase_forward_reads() -> None:
+    with pytest.raises(ValueError, match="invalid bases"):
+        orient_read(
+            read_id="r1",
+            sequence="ACgTN",
+            qualities=(10, 20, 30, 40, 35),
+            direction="forward",
+        )
 
 
 def test_orient_read_reverse_complements_reverse_reads() -> None:
@@ -55,6 +76,16 @@ def test_orient_read_reverse_complements_reverse_reads() -> None:
         qualities=(35, 40, 30, 20, 10),
         direction="reverse",
     )
+
+
+def test_orient_read_rejects_lowercase_reverse_reads() -> None:
+    with pytest.raises(ValueError, match="invalid bases"):
+        orient_read(
+            read_id="r2",
+            sequence="ACgTT",
+            qualities=(10, 20, 30, 40, 35),
+            direction="reverse",
+        )
 
 
 def test_trim_terminal_ns_preserves_internal_ns_and_quality_alignment() -> None:
