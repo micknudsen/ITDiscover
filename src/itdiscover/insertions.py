@@ -118,6 +118,8 @@ def _passes_insertion_filters(
         return False
     if "N" in sequence.upper():
         return False
+    # Trailing insertions may be partial observations clipped by the read edge,
+    # so only fully internal insertions are required to be in-frame here.
     if require_in_frame and not trailing and len(sequence) % 3 != 0:
         return False
     return True
