@@ -21,13 +21,16 @@ classifiers = [
   "Intended Audience :: Science/Research",
   "Topic :: Scientific/Engineering :: Bioinformatics",
 ]
-dependencies = []
+dependencies = [
+  "biopython>=1.84",
+]
 
 [project.scripts]
 itdiscover = "itdiscover.cli:main"
 
 [project.optional-dependencies]
 dev = [
+  "biopython>=1.84",
   "pytest>=8.0",
 ]
 
