@@ -1,0 +1,35 @@
+"""High-level in-memory ITD calling pipeline."""
+
+from collections.abc import Iterable
+
+from .alignment import AlignmentScoring, align_read_to_reference
+from .calls import ITDCall, call_exact_itds
+from .reads import SequencingRead, preprocess_reads
+from .sequences import validate_sequence
+
+
+def call_exact_itds_from_reads(
+    reads: Iterable[SequencingRead],
+    reference: str,
+    *,
+    min_read_length: int = 100,
+    min_mean_quality: float = 30,
+    min_insert_length: int = 6,
+    scoring: AlignmentScoring = AlignmentScoring(),
+) -> list[ITDCall]:
+    """Call exact-match ITDs from oriented sequencing reads."""
+    validate_sequence(reference, field_name="reference")
+    processed_reads = preprocess_reads(
+        reads,
+        min_length=min_read_length,
+        min_mean_quality=min_mean_quality,
+    )
+    alignments = [
+        align_read_to_reference(read, reference, scoring=scoring)
+        for read in processed_reads
+    ]
+    return call_exact_itds(
+        alignments,
+        reference,
+        min_insert_length=min_insert_length,
+    )
