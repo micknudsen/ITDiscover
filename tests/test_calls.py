@@ -61,12 +61,12 @@ def test_call_exact_itds_reports_support_coverage_and_vaf() -> None:
             itd=ITD(
                 insertion=make_insertion(
                     "itd-read-1",
-                    start=8,
+                    start=2,
                     sequence="CCCGGG",
                 ),
                 tandem_start=3,
                 tandem_sequence="CCCGGG",
-                orientation="upstream",
+                orientation="downstream",
             ),
             support_count=3,
             coverage=10,

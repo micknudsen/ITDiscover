@@ -11,7 +11,7 @@ def Insertion(**kwargs):
     return _Insertion(**kwargs)
 
 
-def test_classifies_exact_upstream_tandem_duplication() -> None:
+def test_classifies_exact_upstream_tandem_duplication_as_canonical_downstream() -> None:
     insertion = Insertion(
         read_id="read-1",
         start=8,
@@ -20,10 +20,15 @@ def test_classifies_exact_upstream_tandem_duplication() -> None:
     )
 
     assert classify_exact_itd(insertion, "AAACCCGGGTTT") == ITD(
-        insertion=insertion,
+        insertion=Insertion(
+            read_id="read-1",
+            start=2,
+            sequence="CCCGGG",
+            direction="forward",
+        ),
         tandem_start=3,
         tandem_sequence="CCCGGG",
-        orientation="upstream",
+        orientation="downstream",
     )
 
 
@@ -43,7 +48,7 @@ def test_classifies_exact_downstream_tandem_duplication() -> None:
     )
 
 
-def test_prefers_upstream_match_when_both_adjacent_segments_match() -> None:
+def test_uses_right_most_canonical_downstream_break_when_both_sides_match() -> None:
     insertion = Insertion(
         read_id="read-1",
         start=5,
@@ -52,10 +57,36 @@ def test_prefers_upstream_match_when_both_adjacent_segments_match() -> None:
     )
 
     assert classify_exact_itd(insertion, "AAAAAA") == ITD(
-        insertion=insertion,
+        insertion=Insertion(
+            read_id="read-1",
+            start=2,
+            sequence="AAA",
+            direction="forward",
+        ),
         tandem_start=3,
         tandem_sequence="AAA",
-        orientation="upstream",
+        orientation="downstream",
+    )
+
+
+def test_slides_repetitive_exact_itds_to_right_most_equivalent_breakpoint() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=0,
+        sequence="AAA",
+        direction="forward",
+    )
+
+    assert classify_exact_itd(insertion, "AAAAAA") == ITD(
+        insertion=Insertion(
+            read_id="read-1",
+            start=2,
+            sequence="AAA",
+            direction="forward",
+        ),
+        tandem_start=3,
+        tandem_sequence="AAA",
+        orientation="downstream",
     )
 
 
