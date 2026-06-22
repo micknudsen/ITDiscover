@@ -112,6 +112,62 @@ def test_call_exact_itds_from_fragments_filters_low_quality_reads() -> None:
     )
 
 
+def test_call_exact_itds_from_fragments_keeps_passing_mate_when_other_mate_fails() -> None:
+    reference = "AAACCCGGGTTT"
+    fragments = [
+        make_fragment(
+            "reverse-itd",
+            reference,
+            "AAACCCGGGCCCGGGTTT",
+            forward_quality=10,
+        ),
+        make_fragment("wt-fragment", reference, reference),
+    ]
+
+    calls = call_exact_itds_from_fragments(
+        fragments,
+        reference,
+        min_read_length=12,
+        min_mean_quality=30,
+    )
+
+    assert len(calls) == 1
+    assert calls[0].itd.insertion.read_id == "reverse-itd/2"
+    assert calls[0].itd.insertion.direction == "reverse"
+    assert calls[0].support_count == 1
+    assert calls[0].coverage == 2
+    assert calls[0].vaf == 0.5
+
+
+def test_call_exact_itds_from_fragments_excludes_failed_mate_from_support_but_keeps_passing_mate_for_coverage() -> None:
+    reference = "AAACCCGGGTTT"
+    fragments = [
+        make_fragment(
+            "failed-itd-passing-wt",
+            "AAACCCGGGCCCGGGTTT",
+            reference,
+            forward_quality=10,
+        ),
+        make_fragment(
+            "passing-itd",
+            "AAACCCGGGCCCGGGTTT",
+            reference,
+        ),
+    ]
+
+    calls = call_exact_itds_from_fragments(
+        fragments,
+        reference,
+        min_read_length=12,
+        min_mean_quality=30,
+    )
+
+    assert len(calls) == 1
+    assert calls[0].support_count == 1
+    assert calls[0].coverage == 2
+    assert calls[0].vaf == 0.5
+
+
 def test_call_exact_itds_from_fragments_trims_terminal_ns_before_calling() -> None:
     reference = "AAACCCGGGTTT"
     fragments = [
