@@ -4,12 +4,12 @@ from collections.abc import Iterable
 
 from .alignment import AlignmentScoring, align_read_to_reference
 from .calls import ITDCall, call_exact_itds
-from .reads import SequencingRead, preprocess_reads
+from .reads import Fragment, preprocess_fragments
 from .sequences import validate_sequence
 
 
-def call_exact_itds_from_reads(
-    reads: Iterable[SequencingRead],
+def call_exact_itds_from_fragments(
+    fragments: Iterable[Fragment],
     reference: str,
     *,
     min_read_length: int = 100,
@@ -17,10 +17,10 @@ def call_exact_itds_from_reads(
     min_insert_length: int = 6,
     scoring: AlignmentScoring = AlignmentScoring(),
 ) -> list[ITDCall]:
-    """Call exact-match ITDs from oriented sequencing reads."""
+    """Call exact-match ITDs from paired-end sequencing fragments."""
     validate_sequence(reference, field_name="reference")
-    processed_reads = preprocess_reads(
-        reads,
+    processed_reads = preprocess_fragments(
+        fragments,
         min_length=min_read_length,
         min_mean_quality=min_mean_quality,
     )

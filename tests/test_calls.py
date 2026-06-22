@@ -3,36 +3,66 @@ from itdiscover.insertions import Alignment, Insertion
 from itdiscover.itds import ITD
 
 
+def make_alignment(
+    read_id: str,
+    read_sequence: str,
+    aligned_read: str,
+    aligned_reference: str,
+    direction: str = "forward",
+) -> Alignment:
+    return Alignment(
+        read_id=read_id,
+        fragment_id=read_id,
+        read_sequence=read_sequence,
+        aligned_read=aligned_read,
+        aligned_reference=aligned_reference,
+        direction=direction,
+    )
+
+
+def make_insertion(
+    read_id: str,
+    start: int,
+    sequence: str,
+    direction: str = "forward",
+) -> Insertion:
+    return Insertion(
+        read_id=read_id,
+        fragment_id=read_id,
+        start=start,
+        sequence=sequence,
+        direction=direction,
+    )
+
+
 def test_call_exact_itds_reports_support_coverage_and_vaf() -> None:
     reference = "AAACCCGGGTTT"
     alignments = [
-        Alignment(
-            read_id="itd-read",
-            read_sequence="AAACCCGGGCCCGGGTTT",
-            aligned_read="AAACCCGGGCCCGGGTTT",
-            aligned_reference="AAACCCGGG------TTT",
-            direction="forward",
-            count=3,
-        ),
-        Alignment(
-            read_id="wt-read",
-            read_sequence=reference,
-            aligned_read=reference,
-            aligned_reference=reference,
+        make_alignment(
+            f"itd-read-{index}",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGG------TTT",
+        )
+        for index in range(1, 4)
+    ] + [
+        make_alignment(
+            f"wt-read-{index}",
+            reference,
+            reference,
+            reference,
             direction="reverse",
-            count=7,
-        ),
+        )
+        for index in range(1, 8)
     ]
 
     assert call_exact_itds(alignments, reference) == [
         ITDCall(
             itd=ITD(
-                insertion=Insertion(
-                    read_id="itd-read",
+                insertion=make_insertion(
+                    "itd-read-1",
                     start=8,
                     sequence="CCCGGG",
-                    direction="forward",
-                    count=3,
                 ),
                 tandem_start=3,
                 tandem_sequence="CCCGGG",
@@ -48,30 +78,30 @@ def test_call_exact_itds_reports_support_coverage_and_vaf() -> None:
 def test_call_exact_itds_merges_upstream_and_downstream_representations() -> None:
     reference = "AAACCCGGGTTT"
     alignments = [
-        Alignment(
-            read_id="upstream-representation",
-            read_sequence="AAACCCGGGCCCGGGTTT",
-            aligned_read="AAACCCGGGCCCGGGTTT",
-            aligned_reference="AAACCCGGG------TTT",
-            direction="forward",
-            count=2,
-        ),
-        Alignment(
-            read_id="downstream-representation",
-            read_sequence="AAACCCGGGCCCGGGTTT",
-            aligned_read="AAACCCGGGCCCGGGTTT",
-            aligned_reference="AAA------CCCGGGTTT",
+        make_alignment(
+            f"upstream-representation-{index}",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGG------TTT",
+        )
+        for index in range(1, 3)
+    ] + [
+        make_alignment(
+            f"downstream-representation-{index}",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGGCCCGGGTTT",
+            "AAA------CCCGGGTTT",
             direction="reverse",
-            count=3,
-        ),
-        Alignment(
-            read_id="wt-read",
-            read_sequence=reference,
-            aligned_read=reference,
-            aligned_reference=reference,
-            direction="forward",
-            count=7,
-        ),
+        )
+        for index in range(1, 4)
+    ] + [
+        make_alignment(
+            f"wt-read-{index}",
+            reference,
+            reference,
+            reference,
+        )
+        for index in range(1, 8)
     ]
 
     calls = call_exact_itds(alignments, reference)
@@ -80,29 +110,58 @@ def test_call_exact_itds_merges_upstream_and_downstream_representations() -> Non
     assert calls[0].support_count == 5
     assert calls[0].coverage == 12
     assert calls[0].vaf == 5 / 12
-    assert calls[0].itd.insertion.read_id == "downstream-representation"
-    assert calls[0].itd.orientation == "downstream"
+
+
+def test_call_exact_itds_counts_overlapping_mates_once_per_fragment() -> None:
+    reference = "AAACCCGGGTTT"
+    alignments = [
+        Alignment(
+            read_id="fragment-1/1",
+            fragment_id="fragment-1",
+            read_sequence="AAACCCGGGCCCGGGTTT",
+            aligned_read="AAACCCGGGCCCGGGTTT",
+            aligned_reference="AAA------CCCGGGTTT",
+            direction="forward",
+        ),
+        Alignment(
+            read_id="fragment-1/2",
+            fragment_id="fragment-1",
+            read_sequence="AAACCCGGGCCCGGGTTT",
+            aligned_read="AAACCCGGGCCCGGGTTT",
+            aligned_reference="AAA------CCCGGGTTT",
+            direction="reverse",
+        ),
+        Alignment(
+            read_id="fragment-2/1",
+            fragment_id="fragment-2",
+            read_sequence=reference,
+            aligned_read=reference,
+            aligned_reference=reference,
+            direction="forward",
+        ),
+    ]
+
+    calls = call_exact_itds(alignments, reference)
+
+    assert len(calls) == 1
+    assert calls[0].support_count == 1
+    assert calls[0].coverage == 2
+    assert calls[0].vaf == 0.5
 
 
 def test_call_exact_itds_ignores_non_itd_insertions() -> None:
     reference = "AAACCCGGGTTT"
     alignments = [
-        Alignment(
-            read_id="insertion-read",
-            read_sequence="AAACCCGGGAAAAAATTT",
-            aligned_read="AAACCCGGGAAAAAATTT",
-            aligned_reference="AAACCCGGG------TTT",
-            direction="forward",
-            count=4,
-        ),
-        Alignment(
-            read_id="wt-read",
-            read_sequence=reference,
-            aligned_read=reference,
-            aligned_reference=reference,
-            direction="forward",
-            count=6,
-        ),
+        make_alignment(
+            f"insertion-read-{index}",
+            "AAACCCGGGAAAAAATTT",
+            "AAACCCGGGAAAAAATTT",
+            "AAACCCGGG------TTT",
+        )
+        for index in range(1, 5)
+    ] + [
+        make_alignment(f"wt-read-{index}", reference, reference, reference)
+        for index in range(1, 7)
     ]
 
     assert call_exact_itds(alignments, reference) == []
@@ -111,19 +170,17 @@ def test_call_exact_itds_ignores_non_itd_insertions() -> None:
 def test_call_exact_itds_returns_sorted_calls() -> None:
     reference = "AAACCCGGGTTTAAACCC"
     alignments = [
-        Alignment(
-            read_id="later-itd",
-            read_sequence="AAACCCGGGTTTAAACCCCCC",
-            aligned_read="AAACCCGGGTTTAAACCCCCC",
-            aligned_reference="AAACCCGGGTTTAAACCC---",
-            direction="forward",
+        make_alignment(
+            "later-itd",
+            "AAACCCGGGTTTAAACCCCCC",
+            "AAACCCGGGTTTAAACCCCCC",
+            "AAACCCGGGTTTAAACCC---",
         ),
-        Alignment(
-            read_id="earlier-itd",
-            read_sequence="AAACCCGGGCCCGGGTTTAAACCC",
-            aligned_read="AAACCCGGGCCCGGGTTTAAACCC",
-            aligned_reference="AAACCCGGG------TTTAAACCC",
-            direction="forward",
+        make_alignment(
+            "earlier-itd",
+            "AAACCCGGGCCCGGGTTTAAACCC",
+            "AAACCCGGGCCCGGGTTTAAACCC",
+            "AAACCCGGG------TTTAAACCC",
         ),
     ]
 

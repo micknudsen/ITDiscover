@@ -1,6 +1,6 @@
 """Inter-base coverage and variant allele frequency calculations."""
 
-from collections import Counter
+from collections import defaultdict
 from collections.abc import Iterable
 
 from .insertions import Alignment
@@ -50,16 +50,16 @@ def spans_insertion_site(alignment: Alignment, site: int) -> bool:
 
 
 def interbase_coverage(alignments: Iterable[Alignment]) -> dict[int, int]:
-    """Return read-count weighted coverage for every spanned insertion site."""
-    coverage: Counter[int] = Counter()
+    """Return fragment-level coverage for every spanned insertion site."""
+    coverage: defaultdict[int, set[str]] = defaultdict(set)
 
     for alignment in alignments:
         ref_length = reference_length(alignment)
         for site in range(-1, ref_length):
             if spans_insertion_site(alignment, site):
-                coverage[site] += alignment.count
+                coverage[site].add(alignment.fragment_id)
 
-    return dict(coverage)
+    return {site: len(fragment_ids) for site, fragment_ids in coverage.items()}
 
 
 def variant_allele_frequency(supporting_count: int, spanning_count: int) -> float:

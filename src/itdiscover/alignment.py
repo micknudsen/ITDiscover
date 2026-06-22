@@ -37,11 +37,11 @@ def align_read_to_reference(
     )
     return Alignment(
         read_id=read.read_id,
+        fragment_id=read.fragment_id,
         read_sequence=read.sequence,
         aligned_read=aligned_read,
         aligned_reference=aligned_reference,
         direction=read.direction,
-        count=read.count,
     )
 
 

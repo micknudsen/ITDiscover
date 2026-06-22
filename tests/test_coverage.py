@@ -8,6 +8,13 @@ from itdiscover.coverage import (
 )
 from itdiscover.insertions import Alignment
 
+_Alignment = Alignment
+
+
+def Alignment(**kwargs):
+    kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _Alignment(**kwargs)
+
 
 def test_covered_reference_positions_excludes_insertions_and_deletions() -> None:
     alignment = Alignment(
@@ -54,24 +61,25 @@ def test_edge_sites_require_terminal_reference_base_coverage() -> None:
     assert spans_insertion_site(alignment, 5)
 
 
-def test_interbase_coverage_is_weighted_by_alignment_count() -> None:
+def test_interbase_coverage_counts_distinct_fragments() -> None:
     alignments = [
         Alignment(
-            read_id="read-1",
+            read_id=f"full-read-{index}",
             read_sequence="AAACCC",
             aligned_read="AAACCC",
             aligned_reference="AAACCC",
             direction="forward",
-            count=3,
-        ),
+        )
+        for index in range(1, 4)
+    ] + [
         Alignment(
-            read_id="read-2",
+            read_id=f"partial-read-{index}",
             read_sequence="CCC",
             aligned_read="---CCC",
             aligned_reference="AAACCC",
             direction="reverse",
-            count=2,
-        ),
+        )
+        for index in range(1, 3)
     ]
 
     assert interbase_coverage(alignments) == {
@@ -82,6 +90,45 @@ def test_interbase_coverage_is_weighted_by_alignment_count() -> None:
         3: 5,
         4: 5,
         5: 5,
+    }
+
+
+def test_interbase_coverage_counts_overlapping_mates_once_per_fragment() -> None:
+    alignments = [
+        Alignment(
+            read_id="fragment-1/1",
+            fragment_id="fragment-1",
+            read_sequence="AAACCC",
+            aligned_read="AAACCC",
+            aligned_reference="AAACCC",
+            direction="forward",
+        ),
+        Alignment(
+            read_id="fragment-1/2",
+            fragment_id="fragment-1",
+            read_sequence="AAACCC",
+            aligned_read="AAACCC",
+            aligned_reference="AAACCC",
+            direction="reverse",
+        ),
+        Alignment(
+            read_id="fragment-2/1",
+            fragment_id="fragment-2",
+            read_sequence="AAACCC",
+            aligned_read="AAACCC",
+            aligned_reference="AAACCC",
+            direction="forward",
+        ),
+    ]
+
+    assert interbase_coverage(alignments) == {
+        -1: 2,
+        0: 2,
+        1: 2,
+        2: 2,
+        3: 2,
+        4: 2,
+        5: 2,
     }
 
 

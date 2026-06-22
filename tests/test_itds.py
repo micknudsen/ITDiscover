@@ -3,6 +3,13 @@ import pytest
 from itdiscover.insertions import Insertion
 from itdiscover.itds import ITD, classify_exact_itd
 
+_Insertion = Insertion
+
+
+def Insertion(**kwargs):
+    kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _Insertion(**kwargs)
+
 
 def test_classifies_exact_upstream_tandem_duplication() -> None:
     insertion = Insertion(
@@ -10,7 +17,6 @@ def test_classifies_exact_upstream_tandem_duplication() -> None:
         start=8,
         sequence="CCCGGG",
         direction="forward",
-        count=3,
     )
 
     assert classify_exact_itd(insertion, "AAACCCGGGTTT") == ITD(

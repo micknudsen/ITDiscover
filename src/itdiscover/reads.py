@@ -12,17 +12,17 @@ class SequencingRead:
     """A sequencing read oriented to the forward WT reference."""
 
     read_id: str
+    fragment_id: str
     sequence: str
     qualities: tuple[int, ...]
     direction: Direction
-    count: int = 1
 
     def __post_init__(self) -> None:
         if len(self.sequence) != len(self.qualities):
             raise ValueError("sequence and qualities must have equal length")
+        if not self.fragment_id:
+            raise ValueError("fragment_id is required")
         validate_sequence(self.sequence)
-        if self.count < 1:
-            raise ValueError("count must be at least 1")
 
     @property
     def length(self) -> int:
@@ -37,9 +37,36 @@ class SequencingRead:
         return sum(self.qualities) / len(self.qualities)
 
 
+@dataclass(frozen=True)
+class Fragment:
+    """A paired-end sequencing fragment."""
+
+    fragment_id: str
+    forward_read: SequencingRead
+    reverse_read: SequencingRead
+
+    def __post_init__(self) -> None:
+        if not self.fragment_id:
+            raise ValueError("fragment_id is required")
+        if self.forward_read.fragment_id != self.fragment_id:
+            raise ValueError("forward read fragment_id does not match fragment")
+        if self.reverse_read.fragment_id != self.fragment_id:
+            raise ValueError("reverse read fragment_id does not match fragment")
+        if self.forward_read.direction != "forward":
+            raise ValueError("forward_read must have forward direction")
+        if self.reverse_read.direction != "reverse":
+            raise ValueError("reverse_read must have reverse direction")
+
+    @property
+    def reads(self) -> tuple[SequencingRead, SequencingRead]:
+        """Return the fragment's oriented reads."""
+        return (self.forward_read, self.reverse_read)
+
+
 def orient_read(
     *,
     read_id: str,
+    fragment_id: str,
     sequence: str,
     qualities: Iterable[int],
     direction: Direction,
@@ -53,12 +80,14 @@ def orient_read(
     if direction == "forward":
         return SequencingRead(
             read_id=read_id,
+            fragment_id=fragment_id,
             sequence=sequence,
             qualities=qualities,
             direction=direction,
         )
     return SequencingRead(
         read_id=read_id,
+        fragment_id=fragment_id,
         sequence=reverse_complement(sequence),
         qualities=tuple(reversed(qualities)),
         direction=direction,
@@ -77,10 +106,10 @@ def trim_terminal_ns(read: SequencingRead) -> SequencingRead:
 
     return SequencingRead(
         read_id=read.read_id,
+        fragment_id=read.fragment_id,
         sequence=read.sequence[start:end],
         qualities=read.qualities[start:end],
         direction=read.direction,
-        count=read.count,
     )
 
 
@@ -98,37 +127,13 @@ def passes_read_filters(
     return read.length >= min_length and read.mean_quality >= min_mean_quality
 
 
-def collapse_identical_reads(reads: Iterable[SequencingRead]) -> list[SequencingRead]:
-    """Collapse reads with identical oriented sequence and direction."""
-    collapsed: dict[tuple[str, Direction], SequencingRead] = {}
-    counts: dict[tuple[str, Direction], int] = {}
-
-    for read in reads:
-        key = (read.sequence, read.direction)
-        if key not in collapsed:
-            collapsed[key] = read
-            counts[key] = 0
-        counts[key] += read.count
-
-    return [
-        SequencingRead(
-            read_id=read.read_id,
-            sequence=read.sequence,
-            qualities=read.qualities,
-            direction=read.direction,
-            count=counts[key],
-        )
-        for key, read in collapsed.items()
-    ]
-
-
 def preprocess_reads(
     reads: Iterable[SequencingRead],
     *,
     min_length: int = 100,
     min_mean_quality: float = 30,
 ) -> list[SequencingRead]:
-    """Trim, filter, and collapse reads."""
+    """Trim and filter oriented reads."""
     passing_reads = []
     for read in reads:
         trimmed = trim_terminal_ns(read)
@@ -138,4 +143,19 @@ def preprocess_reads(
             min_mean_quality=min_mean_quality,
         ):
             passing_reads.append(trimmed)
-    return collapse_identical_reads(passing_reads)
+    return passing_reads
+
+
+def preprocess_fragments(
+    fragments: Iterable[Fragment],
+    *,
+    min_length: int = 100,
+    min_mean_quality: float = 30,
+) -> list[SequencingRead]:
+    """Return passing oriented reads from paired-end fragments."""
+    reads = [read for fragment in fragments for read in fragment.reads]
+    return preprocess_reads(
+        reads,
+        min_length=min_length,
+        min_mean_quality=min_mean_quality,
+    )

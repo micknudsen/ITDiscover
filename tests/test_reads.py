@@ -1,14 +1,33 @@
 import pytest
 
 from itdiscover.reads import (
+    Fragment,
     SequencingRead,
-    collapse_identical_reads,
     orient_read,
     passes_read_filters,
+    preprocess_fragments,
     preprocess_reads,
     trim_terminal_ns,
 )
 from itdiscover.sequences import reverse_complement
+
+_SequencingRead = SequencingRead
+
+
+def SequencingRead(*args, **kwargs):
+    if args:
+        read_id, sequence, qualities, direction = args
+        kwargs = {
+            "read_id": read_id,
+            "fragment_id": kwargs.pop("fragment_id", read_id),
+            "sequence": sequence,
+            "qualities": qualities,
+            "direction": direction,
+            **kwargs,
+        }
+    else:
+        kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _SequencingRead(**kwargs)
 
 
 def test_sequencing_read_requires_quality_for_each_base() -> None:
@@ -42,6 +61,7 @@ def test_orient_read_keeps_forward_reads_as_is() -> None:
         sequence="ACGTN",
         qualities=(10, 20, 30, 40, 35),
         direction="forward",
+        fragment_id="r1",
     )
 
     assert read == SequencingRead(
@@ -59,6 +79,7 @@ def test_orient_read_rejects_lowercase_forward_reads() -> None:
             sequence="ACgTN",
             qualities=(10, 20, 30, 40, 35),
             direction="forward",
+            fragment_id="r1",
         )
 
 
@@ -68,6 +89,7 @@ def test_orient_read_reverse_complements_reverse_reads() -> None:
         sequence="ACGTT",
         qualities=(10, 20, 30, 40, 35),
         direction="reverse",
+        fragment_id="r2",
     )
 
     assert read == SequencingRead(
@@ -85,6 +107,7 @@ def test_orient_read_rejects_lowercase_reverse_reads() -> None:
             sequence="ACgTT",
             qualities=(10, 20, 30, 40, 35),
             direction="reverse",
+            fragment_id="r2",
         )
 
 
@@ -123,17 +146,23 @@ def test_passes_read_filters_uses_trimmed_length_and_mean_quality() -> None:
     assert not passes_read_filters(low_quality, min_length=4, min_mean_quality=30)
 
 
-def test_collapse_identical_reads_keeps_directions_separate() -> None:
+def test_fragment_requires_matching_fragment_ids_and_directions() -> None:
+    with pytest.raises(ValueError, match="reverse read fragment_id"):
+        Fragment(
+            fragment_id="fragment-1",
+            forward_read=SequencingRead("fragment-1/1", "ACGT", (30,) * 4, "forward", fragment_id="fragment-1"),
+            reverse_read=SequencingRead("fragment-2/2", "ACGT", (30,) * 4, "reverse", fragment_id="fragment-2"),
+        )
+
+
+def test_preprocess_reads_keeps_distinct_fragments_separate() -> None:
     reads = [
-        SequencingRead("read-1", "ACGT", (30, 30, 30, 30), "forward", count=2),
-        SequencingRead("read-2", "ACGT", (31, 31, 31, 31), "forward", count=3),
-        SequencingRead("read-3", "ACGT", (32, 32, 32, 32), "reverse", count=4),
+        SequencingRead("read-1", "ACGT", (30, 30, 30, 30), "forward"),
+        SequencingRead("read-2", "ACGT", (31, 31, 31, 31), "forward"),
+        SequencingRead("read-3", "ACGT", (32, 32, 32, 32), "reverse"),
     ]
 
-    assert collapse_identical_reads(reads) == [
-        SequencingRead("read-1", "ACGT", (30, 30, 30, 30), "forward", count=5),
-        SequencingRead("read-3", "ACGT", (32, 32, 32, 32), "reverse", count=4),
-    ]
+    assert preprocess_reads(reads, min_length=4, min_mean_quality=30) == reads
 
 
 def test_preprocess_reads_trims_filters_and_collapses() -> None:
@@ -145,5 +174,18 @@ def test_preprocess_reads_trims_filters_and_collapses() -> None:
     ]
 
     assert preprocess_reads(reads, min_length=4, min_mean_quality=30) == [
-        SequencingRead("read-1", "ACGT", (30, 30, 30, 30), "forward", count=2),
+        SequencingRead("read-1", "ACGT", (30, 30, 30, 30), "forward"),
+        SequencingRead("read-2", "ACGT", (31, 31, 31, 31), "forward"),
+    ]
+
+
+def test_preprocess_fragments_returns_passing_reads_from_paired_fragments() -> None:
+    fragment = Fragment(
+        fragment_id="fragment-1",
+        forward_read=SequencingRead("fragment-1/1", "ACGT", (30,) * 4, "forward", fragment_id="fragment-1"),
+        reverse_read=SequencingRead("fragment-1/2", "NNNN", (30,) * 4, "reverse", fragment_id="fragment-1"),
+    )
+
+    assert preprocess_fragments([fragment], min_length=4, min_mean_quality=30) == [
+        SequencingRead("fragment-1/1", "ACGT", (30,) * 4, "forward", fragment_id="fragment-1")
     ]

@@ -2,6 +2,19 @@ import pytest
 
 from itdiscover.insertions import Alignment, Insertion, extract_insertions
 
+_Alignment = Alignment
+_Insertion = Insertion
+
+
+def Alignment(**kwargs):
+    kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _Alignment(**kwargs)
+
+
+def Insertion(**kwargs):
+    kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _Insertion(**kwargs)
+
 
 def test_alignment_requires_equal_aligned_lengths() -> None:
     with pytest.raises(ValueError, match="equal length"):
@@ -53,7 +66,6 @@ def test_extracts_internal_in_frame_insertion() -> None:
         aligned_read="AAACCCCCCGGGTTT",
         aligned_reference="AAA------GGGTTT",
         direction="forward",
-        count=4,
     )
 
     assert extract_insertions(alignment) == [
@@ -62,7 +74,6 @@ def test_extracts_internal_in_frame_insertion() -> None:
             start=2,
             sequence="CCCCCC",
             direction="forward",
-            count=4,
             trailing=False,
         )
     ]

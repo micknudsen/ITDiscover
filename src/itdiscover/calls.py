@@ -43,7 +43,7 @@ def call_exact_itds(
     calls: list[ITDCall] = []
     for itds in grouped_itds.values():
         representative = _representative_itd(itds)
-        support_count = sum(itd.insertion.count for itd in itds)
+        support_count = len({itd.insertion.fragment_id for itd in itds})
         coverage = coverage_by_site.get(representative.insertion.start, 0)
         calls.append(
             ITDCall(
@@ -66,7 +66,7 @@ def _itd_call_key(itd: ITD) -> ITDCallKey:
 
 
 def _representative_itd(itds: list[ITD]) -> ITD:
-    return max(itds, key=lambda itd: itd.insertion.count)
+    return itds[0]
 
 
 def _sort_key(call: ITDCall) -> tuple[int, int, str]:

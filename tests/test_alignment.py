@@ -4,6 +4,19 @@ from itdiscover.alignment import AlignmentScoring, align_read_to_reference
 from itdiscover.insertions import Alignment
 from itdiscover.reads import SequencingRead
 
+_Alignment = Alignment
+_SequencingRead = SequencingRead
+
+
+def Alignment(**kwargs):
+    kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _Alignment(**kwargs)
+
+
+def SequencingRead(**kwargs):
+    kwargs.setdefault("fragment_id", kwargs["read_id"])
+    return _SequencingRead(**kwargs)
+
 
 def test_align_read_to_reference_aligns_perfect_full_length_read() -> None:
     read = SequencingRead(
@@ -11,7 +24,6 @@ def test_align_read_to_reference_aligns_perfect_full_length_read() -> None:
         sequence="AAACCCGGG",
         qualities=(40,) * 9,
         direction="forward",
-        count=3,
     )
 
     assert align_read_to_reference(read, "AAACCCGGG") == Alignment(
@@ -20,7 +32,6 @@ def test_align_read_to_reference_aligns_perfect_full_length_read() -> None:
         aligned_read="AAACCCGGG",
         aligned_reference="AAACCCGGG",
         direction="forward",
-        count=3,
     )
 
 

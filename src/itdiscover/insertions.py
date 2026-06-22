@@ -13,15 +13,17 @@ class Alignment:
     """A read aligned to a wild-type amplicon reference."""
 
     read_id: str
+    fragment_id: str
     read_sequence: str
     aligned_read: str
     aligned_reference: str
     direction: Direction
-    count: int = 1
 
     def __post_init__(self) -> None:
         if len(self.aligned_read) != len(self.aligned_reference):
             raise ValueError("aligned_read and aligned_reference must have equal length")
+        if not self.fragment_id:
+            raise ValueError("fragment_id is required")
         validate_sequence(self.read_sequence, field_name="read_sequence")
         validate_sequence(
             self.aligned_read,
@@ -33,8 +35,6 @@ class Alignment:
             valid_chars=VALID_ALIGNMENT_CHARS,
             field_name="aligned_reference",
         )
-        if self.count < 1:
-            raise ValueError("count must be at least 1")
 
 
 @dataclass(frozen=True)
@@ -42,16 +42,16 @@ class Insertion:
     """An insertion relative to the wild-type amplicon reference."""
 
     read_id: str
+    fragment_id: str
     start: int
     sequence: str
     direction: Direction
-    count: int = 1
     trailing: bool = False
 
     def __post_init__(self) -> None:
+        if not self.fragment_id:
+            raise ValueError("fragment_id is required")
         validate_sequence(self.sequence)
-        if self.count < 1:
-            raise ValueError("count must be at least 1")
 
     @property
     def length(self) -> int:
@@ -114,10 +114,10 @@ def extract_insertions(
             insertions.append(
                 Insertion(
                     read_id=alignment.read_id,
+                    fragment_id=alignment.fragment_id,
                     start=start,
                     sequence=sequence,
                     direction=alignment.direction,
-                    count=alignment.count,
                     trailing=trailing,
                 )
             )
