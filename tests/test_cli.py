@@ -13,9 +13,12 @@ def test_main_version(capsys) -> None:
     assert capsys.readouterr().out == f"itdiscover {itdiscover.__version__}\n"
 
 
-def test_main_requires_command(capsys) -> None:
-    assert cli.main([]) == 0
-    assert capsys.readouterr().err == ""
+def test_main_requires_arguments(capsys) -> None:
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main([])
+
+    assert exc_info.value.code == 2
+    assert "required" in capsys.readouterr().err
 
 
 def test_call_command_reports_exact_itd_from_paired_fastq(tmp_path, capsys) -> None:
@@ -55,7 +58,6 @@ def test_call_command_reports_exact_itd_from_paired_fastq(tmp_path, capsys) -> N
     assert (
         cli.main(
             [
-                "call",
                 "--reference",
                 str(reference_path),
                 "--r1",
@@ -84,7 +86,6 @@ def test_call_command_rejects_multi_sequence_reference(tmp_path) -> None:
     with pytest.raises(ValueError, match="exactly one sequence"):
         cli.main(
             [
-                "call",
                 "--reference",
                 str(reference_path),
                 "--r1",
@@ -141,7 +142,6 @@ def test_call_command_writes_unique_support_alignment_html_report(tmp_path, caps
     assert (
         cli.main(
             [
-                "call",
                 "--reference",
                 str(reference_path),
                 "--r1",
