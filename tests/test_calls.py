@@ -69,6 +69,7 @@ def test_call_exact_itds_reports_support_coverage_and_vaf() -> None:
                 orientation="downstream",
             ),
             support_count=3,
+            unique_support_count=1,
             coverage=10,
             vaf=0.3,
         )
@@ -108,6 +109,7 @@ def test_call_exact_itds_merges_upstream_and_downstream_representations() -> Non
 
     assert len(calls) == 1
     assert calls[0].support_count == 5
+    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 12
     assert calls[0].vaf == 5 / 12
 
@@ -145,7 +147,49 @@ def test_call_exact_itds_counts_overlapping_mates_once_per_fragment() -> None:
 
     assert len(calls) == 1
     assert calls[0].support_count == 1
+    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 2
+    assert calls[0].vaf == 0.5
+
+
+def test_call_exact_itds_reports_unique_supporting_sequences() -> None:
+    reference = "AAACCCGGGTTT"
+    alignments = [
+        Alignment(
+            read_id="fragment-1/1",
+            fragment_id="fragment-1",
+            read_sequence="AAACCCGGGCCCGGGTTT",
+            aligned_read="AAACCCGGGCCCGGGTTT",
+            aligned_reference="AAACCCGGG------TTT",
+            direction="forward",
+        ),
+        Alignment(
+            read_id="fragment-2/1",
+            fragment_id="fragment-2",
+            read_sequence="GGGAAACCCGGGCCCGGGTTT",
+            aligned_read="GGGAAACCCGGGCCCGGGTTT",
+            aligned_reference="---AAACCCGGG------TTT",
+            direction="forward",
+        ),
+        Alignment(
+            read_id="fragment-3/1",
+            fragment_id="fragment-3",
+            read_sequence="AAACTTGGGCCCGGGTTT",
+            aligned_read="AAACTTGGGCCCGGGTTT",
+            aligned_reference="AAACCCGGG------TTT",
+            direction="forward",
+        ),
+    ] + [
+        make_alignment(f"wt-read-{index}", reference, reference, reference)
+        for index in range(1, 4)
+    ]
+
+    calls = call_exact_itds(alignments, reference)
+
+    assert len(calls) == 1
+    assert calls[0].support_count == 3
+    assert calls[0].unique_support_count == 2
+    assert calls[0].coverage == 6
     assert calls[0].vaf == 0.5
 
 
