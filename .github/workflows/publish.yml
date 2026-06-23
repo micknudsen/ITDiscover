@@ -37,22 +37,26 @@ jobs:
         shell: bash -l {0}
         run: |
           mkdir -p dist
-          python -m conda_build.cli.main_build conda-recipe/ --output-folder dist
+          conda-build conda-recipe/ --output-folder dist
           find dist -maxdepth 3 -type f | sort
 
       - name: Locate built package
         id: locate
         shell: bash -l {0}
         run: |
-          PKG_PATH="$(find dist -type f \( -name "*.conda" -o -name "*.tar.bz2" \) | head -n 1)"
+          PKG_PATH="$(conda-build conda-recipe/ --output)"
           if [ -z "$PKG_PATH" ]; then
-            CONDA_BLD_PATH="$(conda info --base)/envs/itdiscover-build/conda-bld"
-            if [ -d "$CONDA_BLD_PATH" ]; then
-              PKG_PATH="$(find "$CONDA_BLD_PATH" -type f \( -name "*.conda" -o -name "*.tar.bz2" \) | head -n 1)"
+            echo "No conda package path reported by conda-build"
+            exit 1
+          fi
+          if [ ! -f "$PKG_PATH" ]; then
+            ALT_PATH="$(find dist -type f \( -name "*.conda" -o -name "*.tar.bz2" \) | head -n 1)"
+            if [ -n "$ALT_PATH" ]; then
+              PKG_PATH="$ALT_PATH"
             fi
           fi
-          if [ -z "$PKG_PATH" ]; then
-            echo "No conda package found in dist/ or the environment conda-bld cache"
+          if [ ! -f "$PKG_PATH" ]; then
+            echo "Reported package path does not exist: $PKG_PATH"
             exit 1
           fi
           echo "pkg_path=${PKG_PATH}" >> "$GITHUB_OUTPUT"
@@ -60,7 +64,7 @@ jobs:
       - name: Smoke test built package
         shell: bash -l {0}
         run: |
-          python -m conda_build.cli.main_build --test "${{ steps.locate.outputs.pkg_path }}"
+          conda-build --test "${{ steps.locate.outputs.pkg_path }}"
 
       - name: Upload conda artifact
         uses: actions/upload-artifact@v4
