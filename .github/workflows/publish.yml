@@ -28,22 +28,27 @@ jobs:
           channel-priority: strict
           use-mamba: true
 
+      - name: Install conda-build
+        shell: bash -l {0}
+        run: |
+          mamba install -n itdiscover-build -y -c conda-forge conda-build
+
       - name: Build package
         shell: bash -l {0}
         run: |
-          conda build conda-recipe/
+          python -m conda_build.cli.main_build conda-recipe/
 
       - name: Locate built package
         id: locate
         shell: bash -l {0}
         run: |
-          PKG_PATH="$(conda build conda-recipe/ --output)"
+          PKG_PATH="$(python -m conda_build.cli.main_build conda-recipe/ --output)"
           echo "pkg_path=${PKG_PATH}" >> "$GITHUB_OUTPUT"
 
       - name: Smoke test built package
         shell: bash -l {0}
         run: |
-          conda build --test "${{ steps.locate.outputs.pkg_path }}"
+          python -m conda_build.cli.main_build --test "${{ steps.locate.outputs.pkg_path }}"
 
       - name: Upload conda artifact
         uses: actions/upload-artifact@v4
