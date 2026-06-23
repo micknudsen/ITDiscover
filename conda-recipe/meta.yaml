@@ -1,0 +1,35 @@
+{% set name = "itdiscover" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: 0
+  noarch: python
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=69
+    - wheel
+  run:
+    - python >=3.10
+    - biopython >=1.84
+
+test:
+  imports:
+    - itdiscover
+  commands:
+    - itdiscover --help
+
+about:
+  home: https://github.com/micknudsen/ITDiscover
+  summary: Tool for discovering FLT3 ITDs from amplicon sequencing of AML samples
+  license: MIT
+  license_file: LICENSE
