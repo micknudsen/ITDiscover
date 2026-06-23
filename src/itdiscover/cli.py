@@ -75,7 +75,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum insertion length to consider.",
     )
     parser.add_argument(
-        "--unique-support-report-out",
+        "--output",
+        type=_html_output_path,
         help="Optional path for an HTML report with one representative alignment per unique support pattern.",
     )
     return parser
@@ -123,13 +124,20 @@ def _run_call_command(args: argparse.Namespace) -> int:
                 ]
             )
         )
-    if args.unique_support_report_out:
+    if args.output:
         _write_unique_support_alignment_html_report(
-            Path(args.unique_support_report_out),
+            args.output,
             calls,
             representatives,
         )
     return 0
+
+
+def _html_output_path(value: str) -> Path:
+    path = Path(value)
+    if path.suffix.lower() != ".html":
+        raise argparse.ArgumentTypeError("output path must end with .html")
+    return path
 
 
 def _read_single_sequence_fasta(path: Path) -> str:

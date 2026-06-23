@@ -152,7 +152,7 @@ def test_call_command_writes_unique_support_alignment_html_report(tmp_path, caps
                 "12",
                 "--min-mean-quality",
                 "30",
-                "--unique-support-report-out",
+                "--output",
                 str(report_path),
             ]
         )
@@ -169,6 +169,28 @@ def test_call_command_writes_unique_support_alignment_html_report(tmp_path, caps
     assert "TTCAAA[CCCGGG]CCCGGG" in report
     assert "TTTAAA[CCCGGG]CCCGGG" in report
     assert '<span class="diff">T</span>' in report
+
+
+def test_call_command_rejects_non_html_output_path(tmp_path, capsys) -> None:
+    reference_path = tmp_path / "reference.fasta"
+    reference_path.write_text(">FLT3\nAAACCCGGGTTT\n", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(
+            [
+                "--reference",
+                str(reference_path),
+                "--r1",
+                "unused_R1.fastq",
+                "--r2",
+                "unused_R2.fastq",
+                "--output",
+                "report.txt",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "must end with .html" in capsys.readouterr().err
 
 
 def test_alignment_comparison_classes_ignore_leading_gap_shift() -> None:
