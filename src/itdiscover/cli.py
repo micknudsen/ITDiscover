@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import TextIO
 
 from . import __version__
-from .fastq import read_paired_fastq
 from .alignment import align_read_to_reference
+from .fastq import read_paired_fastq
+from .insertions import Alignment
 from .calls import ITDCall, UniqueSupportRepresentative, call_exact_itds_with_representatives
 from .reads import preprocess_fragments
 
