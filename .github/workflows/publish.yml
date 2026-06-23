@@ -36,13 +36,18 @@ jobs:
       - name: Build package
         shell: bash -l {0}
         run: |
-          python -m conda_build.cli.main_build conda-recipe/
+          mkdir -p dist
+          python -m conda_build.cli.main_build conda-recipe/ --output-folder dist
 
       - name: Locate built package
         id: locate
         shell: bash -l {0}
         run: |
-          PKG_PATH="$(python -m conda_build.cli.main_build conda-recipe/ --output)"
+          PKG_PATH="$(find dist -type f \( -name "*.conda" -o -name "*.tar.bz2" \) | head -n 1)"
+          if [ -z "$PKG_PATH" ]; then
+            echo "No conda package found in dist/"
+            exit 1
+          fi
           echo "pkg_path=${PKG_PATH}" >> "$GITHUB_OUTPUT"
 
       - name: Smoke test built package
