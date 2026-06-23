@@ -31,7 +31,7 @@ jobs:
       - name: Install conda-build
         shell: bash -l {0}
         run: |
-          mamba install -n itdiscover-build -y -c conda-forge conda-build
+          conda install -n itdiscover-build -y -c conda-forge conda-build
 
       - name: Build package
         shell: bash -l {0}
