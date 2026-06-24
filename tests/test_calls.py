@@ -1,4 +1,4 @@
-from itdiscover.calls import ITDCall, call_exact_itds
+from itdiscover.calls import ITDCall, ITDFilter, call_exact_itds
 from itdiscover.insertions import Alignment, Insertion
 from itdiscover.itds import ITD
 
@@ -234,3 +234,61 @@ def test_call_exact_itds_returns_sorted_calls() -> None:
         "earlier-itd",
         "later-itd",
     ]
+
+
+def test_call_exact_itds_marks_call_as_fail_when_support_threshold_is_not_met() -> None:
+    reference = "AAACCCGGGTTT"
+    alignments = [
+        make_alignment(
+            "itd-read",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGG------TTT",
+        ),
+        make_alignment("wt-read", reference, reference, reference),
+    ]
+
+    calls = call_exact_itds(
+        alignments,
+        reference,
+        filters=ITDFilter(min_support_count=2),
+    )
+
+    assert len(calls) == 1
+    assert calls[0].status == "FAIL"
+    assert calls[0].filter_reasons == ("LOW_SUPPORT",)
+
+
+def test_call_exact_itds_marks_multiple_filter_failures() -> None:
+    reference = "AAACCCGGGTTT"
+    alignments = [
+        make_alignment(
+            "itd-read",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGGCCCGGGTTT",
+            "AAACCCGGG------TTT",
+        ),
+        make_alignment("wt-read-1", reference, reference, reference),
+        make_alignment("wt-read-2", reference, reference, reference),
+        make_alignment("wt-read-3", reference, reference, reference),
+    ]
+
+    calls = call_exact_itds(
+        alignments,
+        reference,
+        filters=ITDFilter(
+            min_support_count=2,
+            min_unique_support_count=2,
+            min_coverage=5,
+            min_vaf=0.4,
+        ),
+    )
+
+    assert len(calls) == 1
+    assert calls[0].status == "FAIL"
+    assert calls[0].filter_reasons == (
+        "LOW_SUPPORT",
+        "LOW_UNIQUE_SUPPORT",
+        "LOW_COVERAGE",
+        "LOW_VAF",
+    )

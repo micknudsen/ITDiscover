@@ -7,9 +7,9 @@ from typing import TextIO
 
 from . import __version__
 from .alignment import align_read_to_reference
+from .calls import ITDCall, ITDFilter, UniqueSupportRepresentative, call_exact_itds_with_representatives
 from .fastq import read_paired_fastq
 from .insertions import Alignment
-from .calls import ITDCall, UniqueSupportRepresentative, call_exact_itds_with_representatives
 from .reads import preprocess_fragments
 
 
@@ -76,6 +76,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum insertion length to consider.",
     )
     parser.add_argument(
+        "--min-support-count",
+        type=int,
+        default=1,
+        help="Minimum fragment support count required for a call to pass filtering.",
+    )
+    parser.add_argument(
+        "--min-unique-support-count",
+        type=int,
+        default=1,
+        help="Minimum unique support count required for a call to pass filtering.",
+    )
+    parser.add_argument(
+        "--min-coverage",
+        type=int,
+        default=0,
+        help="Minimum coverage required for a call to pass filtering.",
+    )
+    parser.add_argument(
+        "--min-vaf",
+        type=float,
+        default=0.0,
+        help="Minimum VAF required for a call to pass filtering.",
+    )
+    parser.add_argument(
         "--output",
         type=_html_output_path,
         help="Optional path for an HTML report with one representative alignment per unique support pattern.",
@@ -102,14 +126,21 @@ def _run_call_command(args: argparse.Namespace) -> int:
         align_read_to_reference(read, reference)
         for read in processed_reads
     ]
+    filters = ITDFilter(
+        min_support_count=args.min_support_count,
+        min_unique_support_count=args.min_unique_support_count,
+        min_coverage=args.min_coverage,
+        min_vaf=args.min_vaf,
+    )
     calls, representatives = call_exact_itds_with_representatives(
         alignments,
         reference,
         min_insert_length=args.min_insert_length,
+        filters=filters,
     )
     print(
         "tandem_start\tinsertion_start\tsequence\t"
-        "support_count\tunique_support_count\tcoverage\tvaf"
+        "support_count\tunique_support_count\tcoverage\tvaf\tstatus\tfilter_reasons"
     )
     for call in calls:
         print(
@@ -122,6 +153,8 @@ def _run_call_command(args: argparse.Namespace) -> int:
                     str(call.unique_support_count),
                     str(call.coverage),
                     f"{call.vaf:.6f}",
+                    call.status,
+                    _format_filter_reasons(call),
                 ]
             )
         )
@@ -139,6 +172,10 @@ def _html_output_path(value: str) -> Path:
     if path.suffix.lower() != ".html":
         raise argparse.ArgumentTypeError("output path must end with .html")
     return path
+
+
+def _format_filter_reasons(call: ITDCall) -> str:
+    return "." if not call.filter_reasons else ";".join(call.filter_reasons)
 
 
 def _read_single_sequence_fasta(path: Path) -> str:
@@ -334,6 +371,8 @@ def _render_html_call_section(
         ('Unique Support Count', str(call.unique_support_count)),
         ('Coverage', str(call.coverage)),
         ('VAF', f"{call.vaf:.6f}"),
+        ('Status', call.status),
+        ('Filter Reasons', _format_filter_reasons(call)),
     )
     summary_html = "".join(
         f"<div><dt>{html.escape(label)}</dt><dd>{html.escape(value)}</dd></div>"

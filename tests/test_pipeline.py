@@ -1,6 +1,6 @@
 import pytest
 
-from itdiscover.calls import ITDCall
+from itdiscover.calls import ITDCall, ITDFilter
 from itdiscover.insertions import Insertion
 from itdiscover.itds import ITD
 from itdiscover.pipeline import call_exact_itds_from_fragments
@@ -224,3 +224,23 @@ def test_call_exact_itds_from_fragments_counts_overlapping_mates_once() -> None:
 def test_call_exact_itds_from_fragments_rejects_lowercase_reference() -> None:
     with pytest.raises(ValueError, match="reference contains invalid bases"):
         call_exact_itds_from_fragments([], "AAAccc")
+
+
+def test_call_exact_itds_from_fragments_marks_failing_calls_without_dropping_them() -> None:
+    reference = "AAACCCGGGTTT"
+    fragments = [
+        make_fragment("itd-fragment", "AAACCCGGGCCCGGGTTT", reference),
+        make_fragment("wt-fragment", reference, reference),
+    ]
+
+    calls = call_exact_itds_from_fragments(
+        fragments,
+        reference,
+        min_read_length=12,
+        min_mean_quality=30,
+        filters=ITDFilter(min_support_count=2, min_vaf=0.6),
+    )
+
+    assert len(calls) == 1
+    assert calls[0].status == "FAIL"
+    assert calls[0].filter_reasons == ("LOW_SUPPORT", "LOW_VAF")

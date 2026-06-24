@@ -74,8 +74,8 @@ def test_call_command_reports_exact_itd_from_paired_fastq(tmp_path, capsys) -> N
     )
 
     assert capsys.readouterr().out == (
-        "tandem_start\tinsertion_start\tsequence\tsupport_count\tunique_support_count\tcoverage\tvaf\n"
-        "3\t2\tCCCGGG\t1\t1\t2\t0.500000\n"
+        "tandem_start\tinsertion_start\tsequence\tsupport_count\tunique_support_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
+        "3\t2\tCCCGGG\t1\t1\t2\t0.500000\tPASS\t.\n"
     )
 
 
@@ -191,6 +191,68 @@ def test_call_command_rejects_non_html_output_path(tmp_path, capsys) -> None:
 
     assert exc_info.value.code == 2
     assert "must end with .html" in capsys.readouterr().err
+
+
+def test_call_command_reports_filter_status_and_reasons(tmp_path, capsys) -> None:
+    reference_path = tmp_path / "reference.fasta"
+    reference_path.write_text(">FLT3\nAAACCCGGGTTT\n", encoding="utf-8")
+
+    r1_path = tmp_path / "sample_R1.fastq"
+    r1_path.write_text(
+        (
+            "@itd-fragment/1\n"
+            "AAACCCGGGCCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIIIIIIIII\n"
+            "@wt-fragment/1\n"
+            "AAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIII\n"
+        ),
+        encoding="utf-8",
+    )
+
+    r2_path = tmp_path / "sample_R2.fastq"
+    r2_path.write_text(
+        (
+            "@itd-fragment/2\n"
+            "AAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIII\n"
+            "@wt-fragment/2\n"
+            "AAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIII\n"
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "--reference",
+                str(reference_path),
+                "--r1",
+                str(r1_path),
+                "--r2",
+                str(r2_path),
+                "--min-read-length",
+                "12",
+                "--min-mean-quality",
+                "30",
+                "--min-support-count",
+                "2",
+                "--min-vaf",
+                "0.6",
+            ]
+        )
+        == 0
+    )
+
+    assert capsys.readouterr().out == (
+        "tandem_start\tinsertion_start\tsequence\tsupport_count\tunique_support_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
+        "3\t2\tCCCGGG\t1\t1\t2\t0.500000\tFAIL\tLOW_SUPPORT;LOW_VAF\n"
+    )
 
 
 def test_alignment_comparison_classes_ignore_leading_gap_shift() -> None:

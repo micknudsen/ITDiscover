@@ -18,6 +18,33 @@ class ITDCall:
     unique_support_count: int
     coverage: int
     vaf: float
+    status: str = "PASS"
+    filter_reasons: tuple[str, ...] = ()
+
+    @property
+    def passes_filters(self) -> bool:
+        """Return whether the call passes the configured thresholds."""
+        return self.status == "PASS"
+
+
+@dataclass(frozen=True)
+class ITDFilter:
+    """Thresholds used to label exact-match ITD calls."""
+
+    min_support_count: int = 1
+    min_unique_support_count: int = 1
+    min_coverage: int = 0
+    min_vaf: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.min_support_count < 1:
+            raise ValueError("min_support_count must be at least 1")
+        if self.min_unique_support_count < 1:
+            raise ValueError("min_unique_support_count must be at least 1")
+        if self.min_coverage < 0:
+            raise ValueError("min_coverage must not be negative")
+        if self.min_vaf < 0:
+            raise ValueError("min_vaf must not be negative")
 
 
 @dataclass(frozen=True)
@@ -39,12 +66,14 @@ def call_exact_itds(
     reference: str,
     *,
     min_insert_length: int = 6,
+    filters: ITDFilter = ITDFilter(),
 ) -> list[ITDCall]:
     """Call exact-match ITDs and attach support, coverage, and VAF."""
     calls, _ = call_exact_itds_with_representatives(
         alignments,
         reference,
         min_insert_length=min_insert_length,
+        filters=filters,
     )
     return calls
 
@@ -54,6 +83,7 @@ def call_exact_itds_with_representatives(
     reference: str,
     *,
     min_insert_length: int = 6,
+    filters: ITDFilter = ITDFilter(),
 ) -> tuple[list[ITDCall], list[UniqueSupportRepresentative]]:
     """Call exact-match ITDs and retain one alignment per unique support pattern."""
     alignments = list(alignments)
@@ -72,12 +102,22 @@ def call_exact_itds_with_representatives(
         support_count = len({itd.insertion.fragment_id for itd in itds})
         unique_support_count = len(representative_map[key])
         coverage = coverage_by_site.get(representative.insertion.start, 0)
+        vaf = variant_allele_frequency(support_count, coverage)
+        filter_reasons = _call_filter_reasons(
+            support_count=support_count,
+            unique_support_count=unique_support_count,
+            coverage=coverage,
+            vaf=vaf,
+            filters=filters,
+        )
         call = ITDCall(
             itd=representative,
             support_count=support_count,
             unique_support_count=unique_support_count,
             coverage=coverage,
-            vaf=variant_allele_frequency(support_count, coverage),
+            vaf=vaf,
+            status="PASS" if not filter_reasons else "FAIL",
+            filter_reasons=filter_reasons,
         )
         calls.append(call)
         representatives.extend(
@@ -210,3 +250,23 @@ def _representative_sort_key(
         representative.signature,
         representative.alignment.read_id,
     )
+
+
+def _call_filter_reasons(
+    *,
+    support_count: int,
+    unique_support_count: int,
+    coverage: int,
+    vaf: float,
+    filters: ITDFilter,
+) -> tuple[str, ...]:
+    reasons: list[str] = []
+    if support_count < filters.min_support_count:
+        reasons.append("LOW_SUPPORT")
+    if unique_support_count < filters.min_unique_support_count:
+        reasons.append("LOW_UNIQUE_SUPPORT")
+    if coverage < filters.min_coverage:
+        reasons.append("LOW_COVERAGE")
+    if vaf < filters.min_vaf:
+        reasons.append("LOW_VAF")
+    return tuple(reasons)
