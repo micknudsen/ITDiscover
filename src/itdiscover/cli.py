@@ -82,12 +82,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum fragment support count required for a call to pass filtering.",
     )
     parser.add_argument(
-        "--min-unique-support-count",
-        type=int,
-        default=1,
-        help="Minimum unique support count required for a call to pass filtering.",
-    )
-    parser.add_argument(
         "--min-coverage",
         type=int,
         default=0,
@@ -128,7 +122,6 @@ def _run_call_command(args: argparse.Namespace) -> int:
     ]
     filters = ITDFilter(
         min_support_count=args.min_support_count,
-        min_unique_support_count=args.min_unique_support_count,
         min_coverage=args.min_coverage,
         min_vaf=args.min_vaf,
     )
@@ -140,7 +133,7 @@ def _run_call_command(args: argparse.Namespace) -> int:
     )
     print(
         "tandem_start\tinsertion_start\tsequence\t"
-        "support_count\tunique_support_count\tcoverage\tvaf\tstatus\tfilter_reasons"
+        "support_count\tcoverage\tvaf\tstatus\tfilter_reasons"
     )
     for call in calls:
         print(
@@ -150,7 +143,6 @@ def _run_call_command(args: argparse.Namespace) -> int:
                     str(call.itd.insertion.start),
                     call.itd.tandem_sequence,
                     str(call.support_count),
-                    str(call.unique_support_count),
                     str(call.coverage),
                     f"{call.vaf:.6f}",
                     call.status,
@@ -368,7 +360,6 @@ def _render_html_call_section(
         ('Insertion Start', str(call.itd.insertion.start)),
         ('Sequence', call.itd.tandem_sequence),
         ('Support Count', str(call.support_count)),
-        ('Unique Support Count', str(call.unique_support_count)),
         ('Coverage', str(call.coverage)),
         ('VAF', f"{call.vaf:.6f}"),
         ('Status', call.status),

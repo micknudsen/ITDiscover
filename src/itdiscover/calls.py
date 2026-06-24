@@ -15,7 +15,6 @@ class ITDCall:
 
     itd: ITD
     support_count: int
-    unique_support_count: int
     coverage: int
     vaf: float
     status: str = "PASS"
@@ -32,15 +31,12 @@ class ITDFilter:
     """Thresholds used to label exact-match ITD calls."""
 
     min_support_count: int = 1
-    min_unique_support_count: int = 1
     min_coverage: int = 0
     min_vaf: float = 0.0
 
     def __post_init__(self) -> None:
         if self.min_support_count < 1:
             raise ValueError("min_support_count must be at least 1")
-        if self.min_unique_support_count < 1:
-            raise ValueError("min_unique_support_count must be at least 1")
         if self.min_coverage < 0:
             raise ValueError("min_coverage must not be negative")
         if self.min_vaf < 0:
@@ -100,12 +96,10 @@ def call_exact_itds_with_representatives(
         representative = _representative_itd(itds)
         key = _itd_call_key(representative)
         support_count = len({itd.insertion.fragment_id for itd in itds})
-        unique_support_count = len(representative_map[key])
         coverage = coverage_by_site.get(representative.insertion.start, 0)
         vaf = variant_allele_frequency(support_count, coverage)
         filter_reasons = _call_filter_reasons(
             support_count=support_count,
-            unique_support_count=unique_support_count,
             coverage=coverage,
             vaf=vaf,
             filters=filters,
@@ -113,7 +107,6 @@ def call_exact_itds_with_representatives(
         call = ITDCall(
             itd=representative,
             support_count=support_count,
-            unique_support_count=unique_support_count,
             coverage=coverage,
             vaf=vaf,
             status="PASS" if not filter_reasons else "FAIL",
@@ -255,7 +248,6 @@ def _representative_sort_key(
 def _call_filter_reasons(
     *,
     support_count: int,
-    unique_support_count: int,
     coverage: int,
     vaf: float,
     filters: ITDFilter,
@@ -263,8 +255,6 @@ def _call_filter_reasons(
     reasons: list[str] = []
     if support_count < filters.min_support_count:
         reasons.append("LOW_SUPPORT")
-    if unique_support_count < filters.min_unique_support_count:
-        reasons.append("LOW_UNIQUE_SUPPORT")
     if coverage < filters.min_coverage:
         reasons.append("LOW_COVERAGE")
     if vaf < filters.min_vaf:

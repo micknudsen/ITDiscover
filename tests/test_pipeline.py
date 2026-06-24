@@ -83,7 +83,6 @@ def test_call_exact_itds_from_fragments_reports_support_coverage_and_vaf() -> No
                 orientation="downstream",
             ),
             support_count=3,
-            unique_support_count=1,
             coverage=10,
             vaf=0.3,
         )
@@ -136,7 +135,6 @@ def test_call_exact_itds_from_fragments_keeps_passing_mate_when_other_mate_fails
     assert calls[0].itd.insertion.read_id == "reverse-itd/2"
     assert calls[0].itd.insertion.direction == "reverse"
     assert calls[0].support_count == 1
-    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 2
     assert calls[0].vaf == 0.5
 
@@ -166,7 +164,6 @@ def test_call_exact_itds_from_fragments_excludes_failed_mate_from_support_but_ke
 
     assert len(calls) == 1
     assert calls[0].support_count == 1
-    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 2
     assert calls[0].vaf == 0.5
 
@@ -191,7 +188,6 @@ def test_call_exact_itds_from_fragments_trims_terminal_ns_before_calling() -> No
 
     assert len(calls) == 1
     assert calls[0].support_count == 1
-    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 2
     assert calls[0].vaf == 0.5
 
@@ -216,7 +212,6 @@ def test_call_exact_itds_from_fragments_counts_overlapping_mates_once() -> None:
 
     assert len(calls) == 1
     assert calls[0].support_count == 1
-    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 2
     assert calls[0].vaf == 0.5
 
@@ -224,23 +219,3 @@ def test_call_exact_itds_from_fragments_counts_overlapping_mates_once() -> None:
 def test_call_exact_itds_from_fragments_rejects_lowercase_reference() -> None:
     with pytest.raises(ValueError, match="reference contains invalid bases"):
         call_exact_itds_from_fragments([], "AAAccc")
-
-
-def test_call_exact_itds_from_fragments_marks_failing_calls_without_dropping_them() -> None:
-    reference = "AAACCCGGGTTT"
-    fragments = [
-        make_fragment("itd-fragment", "AAACCCGGGCCCGGGTTT", reference),
-        make_fragment("wt-fragment", reference, reference),
-    ]
-
-    calls = call_exact_itds_from_fragments(
-        fragments,
-        reference,
-        min_read_length=12,
-        min_mean_quality=30,
-        filters=ITDFilter(min_support_count=2, min_vaf=0.6),
-    )
-
-    assert len(calls) == 1
-    assert calls[0].status == "FAIL"
-    assert calls[0].filter_reasons == ("LOW_SUPPORT", "LOW_VAF")

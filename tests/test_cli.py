@@ -74,8 +74,8 @@ def test_call_command_reports_exact_itd_from_paired_fastq(tmp_path, capsys) -> N
     )
 
     assert capsys.readouterr().out == (
-        "tandem_start\tinsertion_start\tsequence\tsupport_count\tunique_support_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
-        "3\t2\tCCCGGG\t1\t1\t2\t0.500000\tPASS\t.\n"
+        "tandem_start\tinsertion_start\tsequence\tsupport_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
+        "3\t2\tCCCGGG\t1\t2\t0.500000\tPASS\t.\n"
     )
 
 
@@ -159,12 +159,11 @@ def test_call_command_writes_unique_support_alignment_html_report(tmp_path, caps
         == 0
     )
 
-    assert "unique_support_count" in capsys.readouterr().out
+    assert "status" in capsys.readouterr().out
     report = report_path.read_text(encoding="utf-8")
     assert "<h1>Unique Support Alignments</h1>" in report
     assert "<h2>ITD 1</h2>" in report
     assert "Support Count" in report
-    assert "Unique Support Count" in report
     assert "count 1" in report
     assert "TTCAAA[CCCGGG]CCCGGG" in report
     assert "TTTAAA[CCCGGG]CCCGGG" in report
@@ -250,8 +249,8 @@ def test_call_command_reports_filter_status_and_reasons(tmp_path, capsys) -> Non
     )
 
     assert capsys.readouterr().out == (
-        "tandem_start\tinsertion_start\tsequence\tsupport_count\tunique_support_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
-        "3\t2\tCCCGGG\t1\t1\t2\t0.500000\tFAIL\tLOW_SUPPORT;LOW_VAF\n"
+        "tandem_start\tinsertion_start\tsequence\tsupport_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
+        "3\t2\tCCCGGG\t1\t2\t0.500000\tFAIL\tLOW_SUPPORT;LOW_VAF\n"
     )
 
 

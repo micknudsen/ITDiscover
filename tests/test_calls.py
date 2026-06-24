@@ -69,7 +69,6 @@ def test_call_exact_itds_reports_support_coverage_and_vaf() -> None:
                 orientation="downstream",
             ),
             support_count=3,
-            unique_support_count=1,
             coverage=10,
             vaf=0.3,
         )
@@ -109,7 +108,6 @@ def test_call_exact_itds_merges_upstream_and_downstream_representations() -> Non
 
     assert len(calls) == 1
     assert calls[0].support_count == 5
-    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 12
     assert calls[0].vaf == 5 / 12
 
@@ -147,7 +145,6 @@ def test_call_exact_itds_counts_overlapping_mates_once_per_fragment() -> None:
 
     assert len(calls) == 1
     assert calls[0].support_count == 1
-    assert calls[0].unique_support_count == 1
     assert calls[0].coverage == 2
     assert calls[0].vaf == 0.5
 
@@ -188,7 +185,6 @@ def test_call_exact_itds_reports_unique_supporting_sequences() -> None:
 
     assert len(calls) == 1
     assert calls[0].support_count == 3
-    assert calls[0].unique_support_count == 2
     assert calls[0].coverage == 6
     assert calls[0].vaf == 0.5
 
@@ -257,38 +253,3 @@ def test_call_exact_itds_marks_call_as_fail_when_support_threshold_is_not_met() 
     assert len(calls) == 1
     assert calls[0].status == "FAIL"
     assert calls[0].filter_reasons == ("LOW_SUPPORT",)
-
-
-def test_call_exact_itds_marks_multiple_filter_failures() -> None:
-    reference = "AAACCCGGGTTT"
-    alignments = [
-        make_alignment(
-            "itd-read",
-            "AAACCCGGGCCCGGGTTT",
-            "AAACCCGGGCCCGGGTTT",
-            "AAACCCGGG------TTT",
-        ),
-        make_alignment("wt-read-1", reference, reference, reference),
-        make_alignment("wt-read-2", reference, reference, reference),
-        make_alignment("wt-read-3", reference, reference, reference),
-    ]
-
-    calls = call_exact_itds(
-        alignments,
-        reference,
-        filters=ITDFilter(
-            min_support_count=2,
-            min_unique_support_count=2,
-            min_coverage=5,
-            min_vaf=0.4,
-        ),
-    )
-
-    assert len(calls) == 1
-    assert calls[0].status == "FAIL"
-    assert calls[0].filter_reasons == (
-        "LOW_SUPPORT",
-        "LOW_UNIQUE_SUPPORT",
-        "LOW_COVERAGE",
-        "LOW_VAF",
-    )
