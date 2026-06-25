@@ -1,15 +1,15 @@
 # ITDiscover
 
-[![Anaconda-Server Badge](https://anaconda.org/micknudsen/itdiscover/badges/version.svg)](https://anaconda.org/micknudsen/itdiscover) [![Anaconda-Server Badge](https://anaconda.org/micknudsen/itdiscover/badges/downloads.svg)](https://anaconda.org/micknudsen/itdiscover)
+[![Anaconda-Server Badge](https://anaconda.org/MOMA-AUH/itdiscover/badges/version.svg)](https://anaconda.org/MOMA-AUH/itdiscover) [![Anaconda-Server Badge](https://anaconda.org/MOMA-AUH/itdiscover/badges/downloads.svg)](https://anaconda.org/MOMA-AUH/itdiscover)
 
 Tool for discovering FLT3 ITDs from amplicon sequencing of AML samples
 
 ## Installation
 
-The recommended way to install **ITDiscover** is via [conda](https://docs.conda.io/), using the `micknudsen` channel:
+The recommended way to install **ITDiscover** is via [conda](https://docs.conda.io/), using the `MOMA-AUH` channel:
 
 ```bash
-conda install micknudsen::itdiscover
+conda install MOMA-AUH::itdiscover
 ```
 
 ## Usage
