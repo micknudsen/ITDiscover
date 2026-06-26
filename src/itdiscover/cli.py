@@ -7,7 +7,13 @@ from typing import TextIO
 
 from . import __version__
 from .alignment import align_read_to_reference
-from .calls import ITDCall, ITDFilter, UniqueSupportRepresentative, call_exact_itds_with_representatives
+from .calls import (
+    ITDCall,
+    ITDFilter,
+    UniqueSupportRepresentative,
+    call_exact_itds_with_representatives,
+    call_fuzzy_itds_with_representatives,
+)
 from .fastq import read_paired_fastq
 from .insertions import Alignment
 from .reads import preprocess_fragments
@@ -76,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum insertion length to consider.",
     )
     parser.add_argument(
+        "--max-mismatches",
+        type=_non_negative_int,
+        help="Allow fuzzy ITD calls with at most this many mismatches.",
+    )
+    parser.add_argument(
         "--min-support-count",
         type=int,
         default=1,
@@ -125,12 +136,21 @@ def _run_call_command(args: argparse.Namespace) -> int:
         min_coverage=args.min_coverage,
         min_vaf=args.min_vaf,
     )
-    calls, representatives = call_exact_itds_with_representatives(
-        alignments,
-        reference,
-        min_insert_length=args.min_insert_length,
-        filters=filters,
-    )
+    if args.max_mismatches is None:
+        calls, representatives = call_exact_itds_with_representatives(
+            alignments,
+            reference,
+            min_insert_length=args.min_insert_length,
+            filters=filters,
+        )
+    else:
+        calls, representatives = call_fuzzy_itds_with_representatives(
+            alignments,
+            reference,
+            max_mismatches=args.max_mismatches,
+            min_insert_length=args.min_insert_length,
+            filters=filters,
+        )
     print(
         "tandem_start\tinsertion_start\tsequence\t"
         "support_count\tcoverage\tvaf\tstatus\tfilter_reasons"
@@ -164,6 +184,13 @@ def _html_output_path(value: str) -> Path:
     if path.suffix.lower() != ".html":
         raise argparse.ArgumentTypeError("output path must end with .html")
     return path
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must not be negative")
+    return parsed
 
 
 def _format_filter_reasons(call: ITDCall) -> str:
