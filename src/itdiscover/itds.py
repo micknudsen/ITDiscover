@@ -30,6 +30,28 @@ class ITD:
         return len(self.tandem_sequence)
 
 
+@dataclass(frozen=True)
+class TandemSimilarity:
+    """Similarity between an inserted sequence and a WT tandem window."""
+
+    insertion: Insertion
+    tandem_start: int
+    tandem_sequence: str
+    mismatches: int
+
+    @property
+    def matches(self) -> int:
+        """Return the number of matching bases in the best window."""
+        return len(self.tandem_sequence) - self.mismatches
+
+    @property
+    def identity(self) -> float:
+        """Return the fraction of matching bases in the best window."""
+        if not self.tandem_sequence:
+            return 0.0
+        return self.matches / len(self.tandem_sequence)
+
+
 def classify_exact_itd(insertion: Insertion, reference: str) -> ITD | None:
     """Classify an insertion as an exact-match tandem duplication.
 
@@ -48,6 +70,46 @@ def classify_exact_itd(insertion: Insertion, reference: str) -> ITD | None:
         return None
 
     return _canonical_downstream_itd(insertion, reference)
+
+
+def score_tandem_similarity(
+    insertion: Insertion,
+    reference: str,
+) -> TandemSimilarity | None:
+    """Score how well an insertion matches any WT tandem window.
+
+    This is a minimal fuzzy-matching primitive for later ITD classification.
+    It searches all WT windows of the same length as the insertion and returns
+    the best match, preferring the right-most window when there is a tie.
+    """
+    _validate_reference(reference)
+    sequence = insertion.sequence
+    if not sequence:
+        return None
+    if len(sequence) > len(reference):
+        return None
+
+    best_start = None
+    best_mismatches = None
+    for tandem_start in range(len(reference) - len(sequence) + 1):
+        tandem_sequence = reference[tandem_start : tandem_start + len(sequence)]
+        mismatches = sum(
+            1 for observed, expected in zip(sequence, tandem_sequence, strict=True)
+            if observed != expected
+        )
+        key = (mismatches, -tandem_start)
+        if best_start is None or key < (best_mismatches, -best_start):
+            best_start = tandem_start
+            best_mismatches = mismatches
+
+    assert best_start is not None
+    assert best_mismatches is not None
+    return TandemSimilarity(
+        insertion=insertion,
+        tandem_start=best_start,
+        tandem_sequence=reference[best_start : best_start + len(sequence)],
+        mismatches=best_mismatches,
+    )
 
 
 def _validate_reference(reference: str) -> None:

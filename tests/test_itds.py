@@ -1,7 +1,7 @@
 import pytest
 
 from itdiscover.insertions import Insertion
-from itdiscover.itds import ITD, classify_exact_itd
+from itdiscover.itds import ITD, TandemSimilarity, classify_exact_itd, score_tandem_similarity
 
 _Insertion = Insertion
 
@@ -139,3 +139,70 @@ def test_itd_reports_inclusive_tandem_end_and_length() -> None:
 
     assert itd.tandem_end == 8
     assert itd.length == 6
+
+
+def test_scores_exact_tandem_similarity() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGG",
+        direction="forward",
+    )
+
+    similarity = score_tandem_similarity(insertion, "AAACCCGGGTTT")
+    
+    assert similarity == TandemSimilarity(
+        insertion=insertion,
+        tandem_start=3,
+        tandem_sequence="CCCGGG",
+        mismatches=0,
+    )
+
+
+def test_scores_best_tandem_similarity_with_one_mismatch() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGA",
+        direction="forward",
+    )
+
+    similarity = score_tandem_similarity(insertion, "AAACCCGGGTTT")
+
+    assert similarity == TandemSimilarity(
+        insertion=insertion,
+        tandem_start=3,
+        tandem_sequence="CCCGGG",
+        mismatches=1,
+    )
+    assert similarity.matches == 5
+    assert similarity.identity == 5 / 6
+
+
+def test_scores_right_most_tandem_on_tie() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=5,
+        sequence="AAA",
+        direction="forward",
+    )
+
+    similarity = score_tandem_similarity(insertion, "AAAAAA")
+
+    assert similarity == TandemSimilarity(
+        insertion=insertion,
+        tandem_start=3,
+        tandem_sequence="AAA",
+        mismatches=0,
+    )
+
+
+def test_scores_tandem_similarity_returns_none_for_long_insertions() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGGTTTAAAA",
+        direction="forward",
+    )
+
+    assert score_tandem_similarity(insertion, "AAACCCGGGTTT") is None
