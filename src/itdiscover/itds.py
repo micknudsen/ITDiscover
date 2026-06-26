@@ -112,8 +112,101 @@ def score_tandem_similarity(
     )
 
 
+def classify_fuzzy_itd(
+    insertion: Insertion,
+    reference: str,
+    *,
+    max_mismatches: int,
+) -> ITD | None:
+    """Classify an insertion as an adjacent fuzzy-match tandem duplication.
+
+    The best same-length WT window must be adjacent to the insertion and must
+    be within the allowed mismatch threshold. If both adjacent windows are tied
+    for best mismatch score, classification is rejected as ambiguous.
+    """
+    if max_mismatches < 0:
+        raise ValueError("max_mismatches must not be negative")
+
+    similarity = score_tandem_similarity(insertion, reference)
+    if similarity is None or similarity.mismatches > max_mismatches:
+        return None
+
+    if not _is_adjacent_tandem_start(insertion, similarity.tandem_start):
+        return None
+
+    adjacent_candidates = _adjacent_tandem_candidates(insertion, reference)
+    best_adjacent_mismatches = min(candidate[2] for candidate in adjacent_candidates)
+    if sum(
+        1
+        for _, _, mismatches in adjacent_candidates
+        if mismatches == best_adjacent_mismatches
+    ) > 1:
+        return None
+
+    orientation: TandemOrientation
+    if similarity.tandem_start == insertion.start + 1:
+        orientation = "downstream"
+    else:
+        orientation = "upstream"
+
+    return ITD(
+        insertion=insertion,
+        tandem_start=similarity.tandem_start,
+        tandem_sequence=similarity.tandem_sequence,
+        orientation=orientation,
+    )
+
+
 def _validate_reference(reference: str) -> None:
     validate_sequence(reference, field_name="reference")
+
+
+def _is_adjacent_tandem_start(insertion: Insertion, tandem_start: int) -> bool:
+    sequence_length = len(insertion.sequence)
+    return tandem_start in (
+        insertion.start - sequence_length + 1,
+        insertion.start + 1,
+    )
+
+
+def _adjacent_tandem_candidates(
+    insertion: Insertion,
+    reference: str,
+) -> list[tuple[TandemOrientation, str, int]]:
+    sequence = insertion.sequence
+    candidates: list[tuple[TandemOrientation, str, int]] = []
+
+    upstream_start = insertion.start - len(sequence) + 1
+    if upstream_start >= 0:
+        upstream_sequence = reference[upstream_start : insertion.start + 1]
+        candidates.append(
+            (
+                "upstream",
+                upstream_sequence,
+                _mismatch_count(sequence, upstream_sequence),
+            )
+        )
+
+    downstream_start = insertion.start + 1
+    downstream_end = downstream_start + len(sequence)
+    if downstream_end <= len(reference):
+        downstream_sequence = reference[downstream_start:downstream_end]
+        candidates.append(
+            (
+                "downstream",
+                downstream_sequence,
+                _mismatch_count(sequence, downstream_sequence),
+            )
+        )
+
+    return candidates
+
+
+def _mismatch_count(observed: str, expected: str) -> int:
+    return sum(
+        1 for observed_base, expected_base in zip(observed, expected, strict=True)
+        if observed_base != expected_base
+    )
 
 
 def _has_adjacent_exact_match(insertion: Insertion, reference: str) -> bool:

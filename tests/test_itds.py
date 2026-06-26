@@ -1,7 +1,13 @@
 import pytest
 
 from itdiscover.insertions import Insertion
-from itdiscover.itds import ITD, TandemSimilarity, classify_exact_itd, score_tandem_similarity
+from itdiscover.itds import (
+    ITD,
+    TandemSimilarity,
+    classify_exact_itd,
+    classify_fuzzy_itd,
+    score_tandem_similarity,
+)
 
 _Insertion = Insertion
 
@@ -206,3 +212,76 @@ def test_scores_tandem_similarity_returns_none_for_long_insertions() -> None:
     )
 
     assert score_tandem_similarity(insertion, "AAACCCGGGTTT") is None
+
+
+def test_classifies_fuzzy_downstream_tandem_duplication_with_one_mismatch() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGA",
+        direction="forward",
+    )
+
+    assert classify_fuzzy_itd(
+        insertion,
+        "AAACCCGGGTTT",
+        max_mismatches=1,
+    ) == ITD(
+        insertion=insertion,
+        tandem_start=3,
+        tandem_sequence="CCCGGG",
+        orientation="downstream",
+    )
+
+
+def test_does_not_classify_fuzzy_itd_when_mismatches_exceed_threshold() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGA",
+        direction="forward",
+    )
+
+    assert classify_fuzzy_itd(
+        insertion,
+        "AAACCCGGGTTT",
+        max_mismatches=0,
+    ) is None
+
+
+def test_does_not_classify_fuzzy_itd_when_best_window_is_non_adjacent() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="TTT",
+        direction="forward",
+    )
+
+    assert classify_fuzzy_itd(
+        insertion,
+        "AAACCCGGGTTT",
+        max_mismatches=3,
+    ) is None
+
+
+def test_does_not_classify_fuzzy_itd_when_adjacent_windows_tie() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="AAT",
+        direction="forward",
+    )
+
+    assert classify_fuzzy_itd(insertion, "AAAAAA", max_mismatches=1) is None
+
+
+def test_classify_fuzzy_itd_rejects_negative_mismatch_threshold() -> None:
+    insertion = Insertion(
+        read_id="read-1",
+        start=2,
+        sequence="CCCGGA",
+        direction="forward",
+    )
+
+    with pytest.raises(ValueError, match="max_mismatches must not be negative"):
+        classify_fuzzy_itd(insertion, "AAACCCGGGTTT", max_mismatches=-1)
