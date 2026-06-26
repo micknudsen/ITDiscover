@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 
 from .alignment import AlignmentScoring, align_read_to_reference
-from .calls import ITDCall, ITDFilter, call_exact_itds
+from .calls import ITDCall, ITDFilter, call_exact_itds, call_fuzzy_itds
 from .reads import Fragment, preprocess_fragments
 from .sequences import validate_sequence
 
@@ -32,6 +32,37 @@ def call_exact_itds_from_fragments(
     return call_exact_itds(
         alignments,
         reference,
+        min_insert_length=min_insert_length,
+        filters=filters,
+    )
+
+
+def call_fuzzy_itds_from_fragments(
+    fragments: Iterable[Fragment],
+    reference: str,
+    *,
+    max_mismatches: int,
+    min_read_length: int = 100,
+    min_mean_quality: float = 30,
+    min_insert_length: int = 6,
+    filters: ITDFilter = ITDFilter(),
+    scoring: AlignmentScoring = AlignmentScoring(),
+) -> list[ITDCall]:
+    """Call fuzzy-match ITDs from paired-end sequencing fragments."""
+    validate_sequence(reference, field_name="reference")
+    processed_reads = preprocess_fragments(
+        fragments,
+        min_length=min_read_length,
+        min_mean_quality=min_mean_quality,
+    )
+    alignments = [
+        align_read_to_reference(read, reference, scoring=scoring)
+        for read in processed_reads
+    ]
+    return call_fuzzy_itds(
+        alignments,
+        reference,
+        max_mismatches=max_mismatches,
         min_insert_length=min_insert_length,
         filters=filters,
     )

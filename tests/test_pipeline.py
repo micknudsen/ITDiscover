@@ -3,7 +3,10 @@ import pytest
 from itdiscover.calls import ITDCall, ITDFilter
 from itdiscover.insertions import Insertion
 from itdiscover.itds import ITD
-from itdiscover.pipeline import call_exact_itds_from_fragments
+from itdiscover.pipeline import (
+    call_exact_itds_from_fragments,
+    call_fuzzy_itds_from_fragments,
+)
 from itdiscover.reads import Fragment, SequencingRead
 
 
@@ -219,3 +222,76 @@ def test_call_exact_itds_from_fragments_counts_overlapping_mates_once() -> None:
 def test_call_exact_itds_from_fragments_rejects_lowercase_reference() -> None:
     with pytest.raises(ValueError, match="reference contains invalid bases"):
         call_exact_itds_from_fragments([], "AAAccc")
+
+
+def test_call_fuzzy_itds_from_fragments_reports_support_coverage_and_vaf() -> None:
+    reference = "AAACCCGGGTTT"
+    fragments = [
+        make_fragment(
+            f"itd-fragment-{index}",
+            "AAACCCGGGCCCGGATTT",
+            reference,
+        )
+        for index in range(1, 4)
+    ] + [
+        make_fragment(f"wt-fragment-{index}", reference, reference)
+        for index in range(1, 8)
+    ]
+
+    assert call_fuzzy_itds_from_fragments(
+        fragments,
+        reference,
+        max_mismatches=1,
+        min_read_length=12,
+        min_mean_quality=30,
+    ) == [
+        ITDCall(
+            itd=ITD(
+                insertion=Insertion(
+                    read_id="itd-fragment-1/1",
+                    fragment_id="itd-fragment-1",
+                    start=8,
+                    sequence="CCCGGA",
+                    direction="forward",
+                ),
+                tandem_start=3,
+                tandem_sequence="CCCGGG",
+                orientation="upstream",
+            ),
+            support_count=3,
+            coverage=10,
+            vaf=0.3,
+        )
+    ]
+
+
+def test_call_fuzzy_itds_from_fragments_rejects_itds_over_threshold() -> None:
+    reference = "AAACCCGGGTTT"
+    fragments = [
+        make_fragment(
+            "itd-fragment",
+            "AAACCCGGGCCCGGATTT",
+            reference,
+        ),
+        make_fragment("wt-fragment", reference, reference),
+    ]
+
+    assert (
+        call_fuzzy_itds_from_fragments(
+            fragments,
+            reference,
+            max_mismatches=0,
+            min_read_length=12,
+            min_mean_quality=30,
+        )
+        == []
+    )
+
+
+def test_call_fuzzy_itds_from_fragments_rejects_negative_mismatch_threshold() -> None:
+    with pytest.raises(ValueError, match="max_mismatches must not be negative"):
+        call_fuzzy_itds_from_fragments(
+            [],
+            "AAACCCGGGTTT",
+            max_mismatches=-1,
+        )

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from .coverage import interbase_coverage, variant_allele_frequency
 from .insertions import Alignment, Insertion, extract_insertions
-from .itds import ITD, classify_exact_itd
+from .itds import ITD, classify_exact_itd, classify_fuzzy_itd
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,79 @@ def call_exact_itds(
         filters=filters,
     )
     return calls
+
+
+def call_fuzzy_itds(
+    alignments: Iterable[Alignment],
+    reference: str,
+    *,
+    max_mismatches: int,
+    min_insert_length: int = 6,
+    filters: ITDFilter = ITDFilter(),
+) -> list[ITDCall]:
+    """Call fuzzy-match ITDs and attach support, coverage, and VAF."""
+    if max_mismatches < 0:
+        raise ValueError("max_mismatches must not be negative")
+    calls, _ = call_fuzzy_itds_with_representatives(
+        alignments,
+        reference,
+        max_mismatches=max_mismatches,
+        min_insert_length=min_insert_length,
+        filters=filters,
+    )
+    return calls
+
+
+def call_fuzzy_itds_with_representatives(
+    alignments: Iterable[Alignment],
+    reference: str,
+    *,
+    max_mismatches: int,
+    min_insert_length: int = 6,
+    filters: ITDFilter = ITDFilter(),
+) -> tuple[list[ITDCall], list[UniqueSupportRepresentative]]:
+    """Call fuzzy-match ITDs and retain one alignment per unique support pattern."""
+    if max_mismatches < 0:
+        raise ValueError("max_mismatches must not be negative")
+    alignments = list(alignments)
+    coverage_by_site = interbase_coverage(alignments)
+    grouped_itds, representative_map = _collect_fuzzy_itd_support(
+        alignments,
+        reference,
+        max_mismatches=max_mismatches,
+        min_insert_length=min_insert_length,
+    )
+
+    calls: list[ITDCall] = []
+    representatives: list[UniqueSupportRepresentative] = []
+    for itds in grouped_itds.values():
+        representative = _representative_itd(itds)
+        key = _itd_call_key(representative)
+        support_count = len({itd.insertion.fragment_id for itd in itds})
+        coverage = coverage_by_site.get(representative.insertion.start, 0)
+        vaf = variant_allele_frequency(support_count, coverage)
+        filter_reasons = _call_filter_reasons(
+            support_count=support_count,
+            coverage=coverage,
+            vaf=vaf,
+            filters=filters,
+        )
+        call = ITDCall(
+            itd=representative,
+            support_count=support_count,
+            coverage=coverage,
+            vaf=vaf,
+            status="PASS" if not filter_reasons else "FAIL",
+            filter_reasons=filter_reasons,
+        )
+        calls.append(call)
+        representatives.extend(
+            _sorted_representatives(representative_map[key].values())
+        )
+
+    calls.sort(key=_sort_key)
+    representatives.sort(key=_representative_sort_key)
+    return calls, representatives
 
 
 def call_exact_itds_with_representatives(
@@ -198,6 +271,55 @@ def _collect_exact_itd_support(
         insertions = extract_insertions(alignment, min_length=min_insert_length)
         for insertion in insertions:
             itd = classify_exact_itd(insertion, reference)
+            if itd is None:
+                continue
+
+            key = _itd_call_key(itd)
+            grouped_itds[key].append(itd)
+            signature = _support_signature(
+                alignment,
+                itd,
+                reference,
+                flank_size=itd.length,
+            )
+            representative_map[key].setdefault(signature, alignment)
+            fragment_ids_by_signature[key][signature].add(alignment.fragment_id)
+
+    finalized_map: SupportRepresentativeMap = defaultdict(dict)
+    for key, alignments_by_signature in representative_map.items():
+        representative_itd = _representative_itd(grouped_itds[key])
+        for signature, alignment in alignments_by_signature.items():
+            finalized_map[key][signature] = UniqueSupportRepresentative(
+                itd=representative_itd,
+                signature=signature,
+                alignment=alignment,
+                support_count=len(fragment_ids_by_signature[key][signature]),
+            )
+
+    return grouped_itds, finalized_map
+
+
+def _collect_fuzzy_itd_support(
+    alignments: Iterable[Alignment],
+    reference: str,
+    *,
+    max_mismatches: int,
+    min_insert_length: int,
+) -> tuple[dict[ITDCallKey, list[ITD]], SupportRepresentativeMap]:
+    grouped_itds: dict[ITDCallKey, list[ITD]] = defaultdict(list)
+    representative_map: dict[ITDCallKey, dict[str, Alignment]] = defaultdict(dict)
+    fragment_ids_by_signature: dict[ITDCallKey, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+
+    for alignment in alignments:
+        insertions = extract_insertions(alignment, min_length=min_insert_length)
+        for insertion in insertions:
+            itd = classify_fuzzy_itd(
+                insertion,
+                reference,
+                max_mismatches=max_mismatches,
+            )
             if itd is None:
                 continue
 
