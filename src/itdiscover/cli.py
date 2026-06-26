@@ -242,7 +242,17 @@ def _write_unique_support_alignment_html_report(
         representatives_by_key.setdefault(key, []).append(representative)
 
     sections: list[str] = []
-    for index, call in enumerate(calls, start=1):
+    ordered_calls = sorted(
+        calls,
+        key=lambda call: (
+            -call.support_count,
+            call.itd.insertion.start,
+            call.itd.tandem_start,
+            call.itd.tandem_sequence,
+            call.itd.insertion.sequence,
+        ),
+    )
+    for index, call in enumerate(ordered_calls, start=1):
         key = (
             call.itd.tandem_start,
             call.itd.tandem_sequence,
@@ -257,7 +267,7 @@ def _write_unique_support_alignment_html_report(
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>ITDiscover Unique Support Alignments</title>
+  <title>ITDiscover Report</title>
   <style>
     :root {
       color-scheme: light;
@@ -267,8 +277,12 @@ def _write_unique_support_alignment_html_report(
       --panel: #f7fafc;
       --diff-bg: #ffe7a3;
       --diff-fg: #6e4a00;
-      --insert-bg: #d8f3dc;
-      --insert-fg: #164b23;
+      --tandem-bg: #dbeafe;
+      --tandem-fg: #12315d;
+      --inserted-bg: #dcfce7;
+      --inserted-fg: #14532d;
+      --insert-mismatch-bg: #ffd6d6;
+      --insert-mismatch-fg: #8a1f1f;
     }
     body {
       margin: 24px;
@@ -328,6 +342,37 @@ def _write_unique_support_alignment_html_report(
       color: var(--muted);
       font-size: 14px;
     }
+    .legend {
+      display: flex;
+      gap: 12px 18px;
+      flex-wrap: wrap;
+      margin: 0 0 20px;
+      color: var(--ink);
+      font-size: 15px;
+    }
+    .legend-item {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .legend-chip {
+      min-width: 1.6em;
+      border: 1px solid rgb(24 35 47 / 18%);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 16px;
+      line-height: 1.25;
+      text-align: center;
+    }
+    .representative-title,
+    .pileup-title {
+      margin: 14px 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
     .signature {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       background: var(--panel);
@@ -348,6 +393,38 @@ def _write_unique_support_alignment_html_report(
     .alignment-row {
       white-space: pre;
     }
+    .match-comparison {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      background: var(--panel);
+      border-radius: 4px;
+      padding: 8px 10px;
+      margin: 0 0 10px;
+      overflow-x: auto;
+    }
+    .match-row {
+      white-space: pre;
+    }
+    .pileup {
+      margin-top: 12px;
+    }
+    .pileup-table {
+      border-collapse: collapse;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      min-width: min(100%, 560px);
+    }
+    .pileup-table th,
+    .pileup-table td {
+      border-bottom: 1px solid var(--line);
+      padding: 5px 8px;
+      text-align: left;
+      white-space: pre;
+    }
+    .pileup-table th {
+      color: var(--muted);
+      font-weight: 600;
+    }
     .label {
       color: var(--muted);
     }
@@ -356,15 +433,31 @@ def _write_unique_support_alignment_html_report(
       color: var(--diff-fg);
       font-weight: 700;
     }
-    .insert {
-      background: var(--insert-bg);
-      color: var(--insert-fg);
+    .tandem-region {
+      background: var(--tandem-bg);
+      color: var(--tandem-fg);
+      font-weight: 700;
+    }
+    .inserted-region {
+      background: var(--inserted-bg);
+      color: var(--inserted-fg);
+      font-weight: 700;
+    }
+    .insert-mismatch {
+      background: var(--insert-mismatch-bg);
+      color: var(--insert-mismatch-fg);
       font-weight: 700;
     }
   </style>
 </head>
 <body>
-  <h1>Unique Support Alignments</h1>
+  <h1>ITDiscover Report</h1>
+  <div class="legend">
+    <span class="legend-item"><span class="legend-chip tandem-region">T</span> tandem sequence</span>
+    <span class="legend-item"><span class="legend-chip inserted-region">I</span> inserted sequence</span>
+    <span class="legend-item"><span class="legend-chip insert-mismatch">A</span> inserted base differs from the tandem sequence</span>
+    <span class="legend-item"><span class="legend-chip diff">A</span> read/reference base substitution</span>
+  </div>
   __SECTIONS__
 </body>
 </html>
@@ -396,14 +489,11 @@ def _render_html_call_section(
         f"<div><dt>{html.escape(label)}</dt><dd>{html.escape(value)}</dd></div>"
         for label, value in summary
     )
-    baseline_alignment = representatives[0].alignment if representatives else None
-    support_html = "".join(
-        _render_html_support_block(
-            support_index,
-            representative,
-            baseline_alignment,
-        )
-        for support_index, representative in enumerate(representatives, start=1)
+    representative = _best_representative(representatives)
+    support_html = (
+        _render_html_support_block(representative)
+        if representative is not None
+        else ""
     )
     return (
         f'<section class="itd">'
@@ -414,20 +504,37 @@ def _render_html_call_section(
     )
 
 
+def _best_representative(
+    representatives: list[UniqueSupportRepresentative],
+) -> UniqueSupportRepresentative | None:
+    if not representatives:
+        return None
+    return min(
+        representatives,
+        key=lambda representative: (
+            representative.mismatches,
+            -representative.support_count,
+            representative.signature,
+            representative.alignment.read_id,
+        ),
+    )
+
+
 def _render_html_support_block(
-    support_index: int,
     representative: UniqueSupportRepresentative,
-    baseline_alignment: Alignment | None,
 ) -> str:
     alignment = representative.alignment
+    reference_classes = _reference_tandem_classes(
+        alignment.aligned_reference,
+        representative.itd,
+    )
     reference_html = _highlight_alignment_differences(
         alignment.aligned_reference,
-        comparison_classes=None,
+        comparison_classes=reference_classes,
     )
-    comparison_classes = (
-        _alignment_comparison_classes(alignment, baseline_alignment)
-        if baseline_alignment is not None
-        else None
+    comparison_classes = _alignment_difference_classes(
+        alignment,
+        representative.itd,
     )
     read_html = _highlight_alignment_differences(
         alignment.aligned_read,
@@ -435,18 +542,54 @@ def _render_html_support_block(
     )
     return (
         '<section class="support">'
-        f'<div class="support-header"><strong>Support {support_index}</strong>'
-        f'<span class="support-meta">count {representative.support_count}</span>'
-        f'<span class="support-meta">read {html.escape(alignment.read_id)}</span>'
-        f'<span class="support-meta">fragment {html.escape(alignment.fragment_id)}</span>'
-        '</div>'
-        f'<div class="signature">{html.escape(representative.signature)}</div>'
+        '<div class="representative-title">Representative alignment</div>'
+        f'<div class="support-header"><strong>{html.escape(alignment.read_id)}</strong></div>'
         '<div class="alignment-block">'
         f'<div class="alignment-row"><span class="label">reference  </span>{reference_html}</div>'
         f'<div class="alignment-row"><span class="label">read       </span>{read_html}</div>'
         '</div>'
+        f'{_render_insert_sequence_pileup(representative)}'
         '</section>'
     )
+
+
+def _render_insert_sequence_pileup(
+    representative: UniqueSupportRepresentative,
+) -> str:
+    if not representative.insert_sequence_supports:
+        return ""
+
+    tandem_sequence = representative.itd.tandem_sequence
+    rows = "".join(
+        (
+            "<tr>"
+            f"<td>{_highlight_sequence_mismatches(support.sequence, tandem_sequence)}</td>"
+            f"<td>{support.mismatches}</td>"
+            f"<td>{support.support_count}</td>"
+            "</tr>"
+        )
+        for support in representative.insert_sequence_supports
+    )
+    return (
+        '<div class="pileup">'
+        '<div class="pileup-title">Inserted sequence pileup</div>'
+        '<table class="pileup-table">'
+        '<thead><tr><th>Inserted sequence</th><th>Mismatches</th><th>Count</th></tr></thead>'
+        f"<tbody>{rows}</tbody>"
+        "</table>"
+        '</div>'
+    )
+
+
+def _highlight_sequence_mismatches(observed: str, expected: str) -> str:
+    fragments: list[str] = []
+    for observed_base, expected_base in zip(observed, expected, strict=True):
+        escaped_base = html.escape(observed_base)
+        if observed_base == expected_base:
+            fragments.append(escaped_base)
+            continue
+        fragments.append(f'<span class="insert-mismatch">{escaped_base}</span>')
+    return "".join(fragments)
 
 
 def _highlight_alignment_differences(
@@ -465,6 +608,59 @@ def _highlight_alignment_differences(
             continue
         fragments.append(escaped_base)
     return "".join(fragments)
+
+
+def _reference_tandem_classes(
+    aligned_reference: str,
+    itd,
+) -> list[str | None]:
+    classes: list[str | None] = []
+    ref_pos = -1
+
+    for ref_base in aligned_reference:
+        css_class = None
+        if ref_base != "-":
+            ref_pos += 1
+            if itd.tandem_start <= ref_pos <= itd.tandem_end:
+                css_class = "tandem-region"
+        classes.append(css_class)
+
+    return classes
+
+
+def _alignment_difference_classes(
+    alignment: Alignment,
+    itd,
+) -> list[str | None]:
+    classes: list[str | None] = []
+    ref_pos = -1
+    insertion_offsets: dict[int, int] = {}
+
+    for read_base, ref_base in zip(
+        alignment.aligned_read,
+        alignment.aligned_reference,
+        strict=True,
+    ):
+        css_class = None
+        if ref_base != "-":
+            ref_pos += 1
+            if read_base != "-" and read_base != ref_base:
+                css_class = "diff"
+        elif read_base != "-":
+            insertion_site = ref_pos
+            offset = insertion_offsets.get(insertion_site, 0)
+            if insertion_site == itd.insertion.start and offset < len(
+                itd.tandem_sequence
+            ):
+                css_class = "inserted-region"
+                expected_base = itd.tandem_sequence[offset]
+                if read_base != expected_base:
+                    css_class = "inserted-region insert-mismatch"
+            insertion_offsets[insertion_site] = offset + 1
+
+        classes.append(css_class)
+
+    return classes
 
 
 def _alignment_comparison_classes(

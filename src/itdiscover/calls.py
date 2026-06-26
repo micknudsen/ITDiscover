@@ -51,6 +51,20 @@ class UniqueSupportRepresentative:
     signature: str
     alignment: Alignment
     support_count: int
+    exact_support_count: int
+    fuzzy_only_support_count: int = 0
+    fuzzy_example_sequence: str | None = None
+    mismatches: int = 0
+    insert_sequence_supports: tuple["InsertSequenceSupport", ...] = ()
+
+
+@dataclass(frozen=True)
+class InsertSequenceSupport:
+    """Fragment support for one observed inserted sequence."""
+
+    sequence: str
+    support_count: int
+    mismatches: int
 
 
 ITDCallKey = tuple[int, str, bool]
@@ -262,10 +276,15 @@ def _collect_exact_itd_support(
     min_insert_length: int,
 ) -> tuple[dict[ITDCallKey, list[ITD]], SupportRepresentativeMap]:
     grouped_itds: dict[ITDCallKey, list[ITD]] = defaultdict(list)
-    representative_map: dict[ITDCallKey, dict[str, Alignment]] = defaultdict(dict)
+    representative_map: dict[ITDCallKey, dict[str, tuple[ITD, Alignment]]] = (
+        defaultdict(dict)
+    )
     fragment_ids_by_signature: dict[ITDCallKey, dict[str, set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )
+    insert_sequences_by_fragment: dict[
+        ITDCallKey, dict[str, dict[str, int]]
+    ] = defaultdict(lambda: defaultdict(dict))
 
     for alignment in alignments:
         insertions = extract_insertions(alignment, min_length=min_insert_length)
@@ -282,18 +301,34 @@ def _collect_exact_itd_support(
                 reference,
                 flank_size=itd.length,
             )
-            representative_map[key].setdefault(signature, alignment)
+            _set_best_representative(
+                representative_map[key],
+                signature,
+                itd,
+                alignment,
+            )
             fragment_ids_by_signature[key][signature].add(alignment.fragment_id)
+            insert_sequences_by_fragment[key][alignment.fragment_id][
+                itd.insertion.sequence
+            ] = _sequence_mismatches(itd.insertion.sequence, itd.tandem_sequence)
 
     finalized_map: SupportRepresentativeMap = defaultdict(dict)
     for key, alignments_by_signature in representative_map.items():
-        representative_itd = _representative_itd(grouped_itds[key])
-        for signature, alignment in alignments_by_signature.items():
+        insert_sequence_supports = _insert_sequence_supports(
+            insert_sequences_by_fragment[key]
+        )
+        for signature, (itd, alignment) in alignments_by_signature.items():
             finalized_map[key][signature] = UniqueSupportRepresentative(
-                itd=representative_itd,
+                itd=itd,
                 signature=signature,
                 alignment=alignment,
                 support_count=len(fragment_ids_by_signature[key][signature]),
+                exact_support_count=len(fragment_ids_by_signature[key][signature]),
+                mismatches=_sequence_mismatches(
+                    itd.insertion.sequence,
+                    itd.tandem_sequence,
+                ),
+                insert_sequence_supports=insert_sequence_supports,
             )
 
     return grouped_itds, finalized_map
@@ -307,10 +342,21 @@ def _collect_fuzzy_itd_support(
     min_insert_length: int,
 ) -> tuple[dict[ITDCallKey, list[ITD]], SupportRepresentativeMap]:
     grouped_itds: dict[ITDCallKey, list[ITD]] = defaultdict(list)
-    representative_map: dict[ITDCallKey, dict[str, Alignment]] = defaultdict(dict)
+    representative_map: dict[ITDCallKey, dict[str, tuple[ITD, Alignment]]] = (
+        defaultdict(dict)
+    )
     fragment_ids_by_signature: dict[ITDCallKey, dict[str, set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )
+    exact_fragment_ids_by_signature: dict[
+        ITDCallKey, dict[str, set[str]]
+    ] = defaultdict(lambda: defaultdict(set))
+    fuzzy_example_sequence_by_signature: dict[
+        ITDCallKey, dict[str, str]
+    ] = defaultdict(dict)
+    insert_sequences_by_fragment: dict[
+        ITDCallKey, dict[str, dict[str, int]]
+    ] = defaultdict(lambda: defaultdict(dict))
 
     for alignment in alignments:
         insertions = extract_insertions(alignment, min_length=min_insert_length)
@@ -331,21 +377,133 @@ def _collect_fuzzy_itd_support(
                 reference,
                 flank_size=itd.length,
             )
-            representative_map[key].setdefault(signature, alignment)
+            _set_best_representative(
+                representative_map[key],
+                signature,
+                itd,
+                alignment,
+            )
             fragment_ids_by_signature[key][signature].add(alignment.fragment_id)
+            insert_sequences_by_fragment[key][alignment.fragment_id][
+                insertion.sequence
+            ] = _sequence_mismatches(insertion.sequence, itd.tandem_sequence)
+
+            exact_itd = classify_exact_itd(insertion, reference)
+            if exact_itd is not None:
+                exact_key = _itd_call_key(exact_itd)
+                exact_signature = _support_signature(
+                    alignment,
+                    exact_itd,
+                    reference,
+                    flank_size=exact_itd.length,
+                )
+                if exact_key == key and exact_signature == signature:
+                    exact_fragment_ids_by_signature[key][signature].add(
+                        alignment.fragment_id
+                    )
+                    continue
+
+            fuzzy_example_sequence_by_signature[key].setdefault(
+                signature,
+                insertion.sequence,
+            )
 
     finalized_map: SupportRepresentativeMap = defaultdict(dict)
     for key, alignments_by_signature in representative_map.items():
-        representative_itd = _representative_itd(grouped_itds[key])
-        for signature, alignment in alignments_by_signature.items():
+        insert_sequence_supports = _insert_sequence_supports(
+            insert_sequences_by_fragment[key]
+        )
+        for signature, (itd, alignment) in alignments_by_signature.items():
+            fragment_ids = fragment_ids_by_signature[key][signature]
+            exact_fragment_ids = exact_fragment_ids_by_signature[key][signature]
+            fuzzy_only_count = len(fragment_ids - exact_fragment_ids)
             finalized_map[key][signature] = UniqueSupportRepresentative(
-                itd=representative_itd,
+                itd=itd,
                 signature=signature,
                 alignment=alignment,
-                support_count=len(fragment_ids_by_signature[key][signature]),
+                support_count=len(fragment_ids),
+                exact_support_count=len(exact_fragment_ids),
+                fuzzy_only_support_count=fuzzy_only_count,
+                fuzzy_example_sequence=fuzzy_example_sequence_by_signature[key].get(
+                    signature
+                ),
+                mismatches=_sequence_mismatches(
+                    itd.insertion.sequence,
+                    itd.tandem_sequence,
+                ),
+                insert_sequence_supports=insert_sequence_supports,
             )
 
     return grouped_itds, finalized_map
+
+
+def _set_best_representative(
+    representatives: dict[str, tuple[ITD, Alignment]],
+    signature: str,
+    itd: ITD,
+    alignment: Alignment,
+) -> None:
+    current = representatives.get(signature)
+    candidate_key = (
+        _sequence_mismatches(itd.insertion.sequence, itd.tandem_sequence),
+        alignment.read_id,
+    )
+    if current is None:
+        representatives[signature] = (itd, alignment)
+        return
+
+    current_itd, current_alignment = current
+    current_key = (
+        _sequence_mismatches(
+            current_itd.insertion.sequence,
+            current_itd.tandem_sequence,
+        ),
+        current_alignment.read_id,
+    )
+    if candidate_key < current_key:
+        representatives[signature] = (itd, alignment)
+
+
+def _insert_sequence_supports(
+    sequences_by_fragment: dict[str, dict[str, int]],
+) -> tuple[InsertSequenceSupport, ...]:
+    fragment_ids_by_sequence: dict[str, set[str]] = defaultdict(set)
+    mismatches_by_sequence: dict[str, int] = {}
+
+    for fragment_id, sequence_mismatches in sequences_by_fragment.items():
+        sequence, mismatches = min(
+            sequence_mismatches.items(),
+            key=lambda item: (item[1], item[0]),
+        )
+        fragment_ids_by_sequence[sequence].add(fragment_id)
+        mismatches_by_sequence[sequence] = mismatches
+
+    supports = [
+        InsertSequenceSupport(
+            sequence=sequence,
+            support_count=len(fragment_ids),
+            mismatches=mismatches_by_sequence[sequence],
+        )
+        for sequence, fragment_ids in fragment_ids_by_sequence.items()
+    ]
+    return tuple(
+        sorted(
+            supports,
+            key=lambda support: (
+                support.mismatches,
+                -support.support_count,
+                support.sequence,
+            ),
+        )
+    )
+
+
+def _sequence_mismatches(observed: str, expected: str) -> int:
+    return sum(
+        1
+        for observed_base, expected_base in zip(observed, expected, strict=True)
+        if observed_base != expected_base
+    )
 
 
 def _sorted_representatives(

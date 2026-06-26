@@ -1,4 +1,9 @@
-from itdiscover.calls import ITDCall, ITDFilter, call_exact_itds
+from itdiscover.calls import (
+    ITDCall,
+    ITDFilter,
+    call_exact_itds,
+    call_fuzzy_itds_with_representatives,
+)
 from itdiscover.insertions import Alignment, Insertion
 from itdiscover.itds import ITD
 
@@ -253,3 +258,46 @@ def test_call_exact_itds_marks_call_as_fail_when_support_threshold_is_not_met() 
     assert len(calls) == 1
     assert calls[0].status == "FAIL"
     assert calls[0].filter_reasons == ("LOW_SUPPORT",)
+
+
+def test_call_fuzzy_itds_reports_exact_and_fuzzy_only_support_counts() -> None:
+    reference = "AAACCCGGGTTT"
+    alignments = [
+        Alignment(
+            read_id="exact-fragment/1",
+            fragment_id="exact-fragment",
+            read_sequence="AAACCCGGGCCCGGGTTT",
+            aligned_read="AAACCCGGGCCCGGGTTT",
+            aligned_reference="AAA------CCCGGGTTT",
+            direction="forward",
+        ),
+        Alignment(
+            read_id="fuzzy-fragment/1",
+            fragment_id="fuzzy-fragment",
+            read_sequence="AAACCCGGACCCGGGTTT",
+            aligned_read="AAACCCGGACCCGGGTTT",
+            aligned_reference="AAA------CCCGGGTTT",
+            direction="forward",
+        ),
+    ]
+
+    calls, representatives = call_fuzzy_itds_with_representatives(
+        alignments,
+        reference,
+        max_mismatches=1,
+    )
+
+    assert len(calls) == 1
+    assert calls[0].support_count == 2
+    assert len(representatives) == 1
+    assert representatives[0].support_count == 2
+    assert representatives[0].exact_support_count == 1
+    assert representatives[0].fuzzy_only_support_count == 1
+    assert representatives[0].fuzzy_example_sequence == "CCCGGA"
+    assert representatives[0].mismatches == 0
+    assert representatives[0].insert_sequence_supports[0].sequence == "CCCGGG"
+    assert representatives[0].insert_sequence_supports[0].support_count == 1
+    assert representatives[0].insert_sequence_supports[0].mismatches == 0
+    assert representatives[0].insert_sequence_supports[1].sequence == "CCCGGA"
+    assert representatives[0].insert_sequence_supports[1].support_count == 1
+    assert representatives[0].insert_sequence_supports[1].mismatches == 1
