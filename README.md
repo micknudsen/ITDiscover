@@ -26,5 +26,10 @@ itdiscover \
   --reference reference.fasta \
   --r1 sample_R1.fastq.gz \
   --r2 sample_R2.fastq.gz \
+  --forward-primer GGGTTT \
+  --reverse-primer AAACCC \
   --output report.html
 ```
+
+The `--output` flag writes an HTML report with one representative alignment per unique support pattern.
+Primer trimming is optional and can be enabled with `--forward-primer` and `--reverse-primer`.
