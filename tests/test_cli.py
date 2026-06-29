@@ -374,7 +374,8 @@ def test_call_command_writes_unique_support_alignment_html_report(tmp_path, caps
     assert "sky blue" not in report
     assert "teal green" not in report
     assert "orange" not in report
-    assert "<h2>ITD 1</h2>" in report
+    assert "<h2>ITD 1</h2>" not in report
+    assert "<h2>ITD 2</h2>" not in report
     assert "Insertion Start" not in report
     assert "Support Count" in report
     assert "support pattern count 1" not in report

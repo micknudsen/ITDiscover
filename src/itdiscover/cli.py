@@ -258,16 +258,14 @@ def _write_unique_support_alignment_html_report(
             call.itd.insertion.sequence,
         ),
     )
-    for index, call in enumerate(ordered_calls, start=1):
+    for call in ordered_calls:
         key = (
             call.itd.tandem_start,
             call.itd.tandem_sequence,
             call.itd.insertion.trailing,
         )
         call_representatives = representatives_by_key.get(key, [])
-        sections.append(
-            _render_html_call_section(index, call, call_representatives)
-        )
+        sections.append(_render_html_call_section(call, call_representatives))
 
     document = """<!DOCTYPE html>
 <html lang="en">
@@ -474,7 +472,6 @@ def _write_unique_support_alignment_html_report(
 
 
 def _render_html_call_section(
-    index: int,
     call: ITDCall,
     representatives: list[UniqueSupportRepresentative],
 ) -> str:
@@ -499,7 +496,6 @@ def _render_html_call_section(
     )
     return (
         f'<section class="itd">'
-        f"<h2>ITD {index}</h2>"
         f'<dl class="summary">{summary_html}</dl>'
         f"{support_html}"
         f"</section>"
