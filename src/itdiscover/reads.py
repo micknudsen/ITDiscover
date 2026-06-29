@@ -63,6 +63,25 @@ class Fragment:
         return (self.forward_read, self.reverse_read)
 
 
+@dataclass(frozen=True)
+class ReadTrimSettings:
+    """Optional primer sequences to trim from oriented reads."""
+
+    forward_primer: str | None = None
+    reverse_primer: str | None = None
+
+    def __post_init__(self) -> None:
+        for field_name, sequence in (
+            ("forward_primer", self.forward_primer),
+            ("reverse_primer", self.reverse_primer),
+        ):
+            if sequence is None:
+                continue
+            if not sequence:
+                raise ValueError(f"{field_name} must not be empty")
+            validate_sequence(sequence, field_name=field_name)
+
+
 def orient_read(
     *,
     read_id: str,
@@ -96,21 +115,26 @@ def orient_read(
 
 def trim_terminal_ns(read: SequencingRead) -> SequencingRead:
     """Trim ambiguous N bases from both ends of a read."""
-    start = 0
-    end = len(read.sequence)
+    trimmed, _ = _trim_terminal_ns_with_stats(read)
+    return trimmed
 
-    while start < end and read.sequence[start] == "N":
-        start += 1
-    while end > start and read.sequence[end - 1] == "N":
-        end -= 1
 
-    return SequencingRead(
-        read_id=read.read_id,
-        fragment_id=read.fragment_id,
-        sequence=read.sequence[start:end],
-        qualities=read.qualities[start:end],
-        direction=read.direction,
-    )
+def trim_primers(
+    read: SequencingRead,
+    trimming: ReadTrimSettings | None,
+) -> SequencingRead | None:
+    """Trim configured primer sequences from an oriented read."""
+    trimmed, _ = _trim_terminal_ns_with_stats(read)
+    if trimming is None:
+        return trimmed
+
+    if trimmed.direction == "forward":
+        trimmed = _trim_prefix_step(trimmed, trimming.forward_primer)
+    else:
+        trimmed = _trim_suffix_step(trimmed, trimming.reverse_primer)
+    if trimmed is None:
+        return None
+    return _trim_terminal_ns_with_stats(trimmed)[0]
 
 
 def passes_read_filters(
@@ -132,17 +156,17 @@ def preprocess_reads(
     *,
     min_length: int = 100,
     min_mean_quality: float = 30,
+    trimming: ReadTrimSettings | None = None,
 ) -> list[SequencingRead]:
     """Trim and filter oriented reads."""
-    passing_reads = []
+    passing_reads: list[SequencingRead] = []
     for read in reads:
-        trimmed = trim_terminal_ns(read)
-        if passes_read_filters(
-            trimmed,
-            min_length=min_length,
-            min_mean_quality=min_mean_quality,
-        ):
-            passing_reads.append(trimmed)
+        trimmed = trim_primers(read, trimming)
+        if trimmed is None:
+            continue
+        if trimmed.length < min_length or trimmed.mean_quality < min_mean_quality:
+            continue
+        passing_reads.append(trimmed)
     return passing_reads
 
 
@@ -151,6 +175,7 @@ def preprocess_fragments(
     *,
     min_length: int = 100,
     min_mean_quality: float = 30,
+    trimming: ReadTrimSettings | None = None,
 ) -> list[SequencingRead]:
     """Return passing oriented reads from paired-end fragments."""
     reads = [read for fragment in fragments for read in fragment.reads]
@@ -158,4 +183,62 @@ def preprocess_fragments(
         reads,
         min_length=min_length,
         min_mean_quality=min_mean_quality,
+        trimming=trimming,
+    )
+
+
+def _trim_terminal_ns_with_stats(
+    read: SequencingRead,
+) -> tuple[SequencingRead, int]:
+    start = 0
+    end = len(read.sequence)
+
+    while start < end and read.sequence[start] == "N":
+        start += 1
+    while end > start and read.sequence[end - 1] == "N":
+        end -= 1
+
+    trimmed = SequencingRead(
+        read_id=read.read_id,
+        fragment_id=read.fragment_id,
+        sequence=read.sequence[start:end],
+        qualities=read.qualities[start:end],
+        direction=read.direction,
+    )
+    return trimmed, len(read.sequence) - len(trimmed.sequence)
+
+
+def _trim_prefix_step(
+    read: SequencingRead,
+    motif: str | None,
+) -> SequencingRead | None:
+    if motif is None:
+        return read
+    index = read.sequence.find(motif)
+    if index < 0:
+        return None
+    return SequencingRead(
+        read_id=read.read_id,
+        fragment_id=read.fragment_id,
+        sequence=read.sequence[index + len(motif) :],
+        qualities=read.qualities[index + len(motif) :],
+        direction=read.direction,
+    )
+
+
+def _trim_suffix_step(
+    read: SequencingRead,
+    motif: str | None,
+) -> SequencingRead | None:
+    if motif is None:
+        return read
+    index = read.sequence.rfind(motif)
+    if index < 0:
+        return None
+    return SequencingRead(
+        read_id=read.read_id,
+        fragment_id=read.fragment_id,
+        sequence=read.sequence[:index],
+        qualities=read.qualities[:index],
+        direction=read.direction,
     )

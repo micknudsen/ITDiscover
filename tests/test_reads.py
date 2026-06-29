@@ -2,11 +2,13 @@ import pytest
 
 from itdiscover.reads import (
     Fragment,
+    ReadTrimSettings,
     SequencingRead,
     orient_read,
     passes_read_filters,
     preprocess_fragments,
     preprocess_reads,
+    trim_primers,
     trim_terminal_ns,
 )
 from itdiscover.sequences import reverse_complement
@@ -125,6 +127,62 @@ def test_trim_terminal_ns_preserves_internal_ns_and_quality_alignment() -> None:
         qualities=(30, 31, 32, 33, 34),
         direction="forward",
     )
+
+
+def test_trim_primers_trims_forward_reads() -> None:
+    read = SequencingRead(
+        read_id="read-1",
+        sequence="GGGCCCGGGTTT",
+        qualities=tuple(range(12)),
+        direction="forward",
+    )
+
+    assert trim_primers(
+        read,
+        ReadTrimSettings(
+            forward_primer="CCC",
+        ),
+    ) == SequencingRead(
+        read_id="read-1",
+        sequence="GGGTTT",
+        qualities=(6, 7, 8, 9, 10, 11),
+        direction="forward",
+    )
+
+
+def test_trim_primers_trims_reverse_reads() -> None:
+    read = SequencingRead(
+        read_id="read-2",
+        sequence="GGGCGTAAA",
+        qualities=tuple(range(9)),
+        direction="reverse",
+    )
+
+    assert trim_primers(
+        read,
+        ReadTrimSettings(
+            reverse_primer="CGT",
+        ),
+    ) == SequencingRead(
+        read_id="read-2",
+        sequence="GGG",
+        qualities=(0, 1, 2),
+        direction="reverse",
+    )
+
+
+def test_trim_primers_discards_reads_without_primer() -> None:
+    read = SequencingRead(
+        read_id="read-3",
+        sequence="GGGTTT",
+        qualities=(10, 11, 12, 13, 14, 15),
+        direction="forward",
+    )
+
+    assert trim_primers(
+        read,
+        ReadTrimSettings(forward_primer="CCC"),
+    ) is None
 
 
 def test_passes_read_filters_uses_trimmed_length_and_mean_quality() -> None:

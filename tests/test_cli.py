@@ -6,6 +6,7 @@ from itdiscover.calls import ITDCall, InsertSequenceSupport, UniqueSupportRepres
 from itdiscover.insertions import Alignment
 from itdiscover.insertions import Insertion
 from itdiscover.itds import ITD
+from itdiscover.sequences import reverse_complement
 
 
 def test_main_version(capsys) -> None:
@@ -76,10 +77,7 @@ def test_call_command_reports_exact_itd_from_paired_fastq(tmp_path, capsys) -> N
         == 0
     )
 
-    assert capsys.readouterr().out == (
-        "tandem_start\tinsertion_start\tsequence\tsupport_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
-        "3\t2\tCCCGGG\t1\t2\t0.500000\tPASS\t.\n"
-    )
+    assert capsys.readouterr().out == ""
 
 
 def test_call_command_reports_fuzzy_itd_from_paired_fastq(tmp_path, capsys) -> None:
@@ -139,16 +137,17 @@ def test_call_command_reports_fuzzy_itd_from_paired_fastq(tmp_path, capsys) -> N
         == 0
     )
 
-    assert capsys.readouterr().out == (
-        "tandem_start\tinsertion_start\tsequence\tsupport_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
-        "3\t8\tCCCGGG\t1\t2\t0.500000\tPASS\t.\n"
-    )
+    assert capsys.readouterr().out == ""
     report = report_path.read_text(encoding="utf-8")
     assert "<title>ITDiscover Report</title>" in report
     assert "<h1>ITDiscover Report</h1>" in report
     assert "Representative alignment" in report
     assert "tandem sequence" in report
     assert "inserted sequence" in report
+    assert "mismatches" in report
+    assert "sky blue" not in report
+    assert "teal green" not in report
+    assert "orange" not in report
     assert 'class="legend-chip tandem-region"' in report
     assert 'class="tandem-region"' in report
     assert 'class="inserted-region' in report
@@ -161,6 +160,128 @@ def test_call_command_reports_fuzzy_itd_from_paired_fastq(tmp_path, capsys) -> N
     assert "<th>Inserted sequence</th><th>Mismatches</th><th>Count</th>" in report
     assert "CCCGGG" in report
     assert 'CCCGG<span class="insert-mismatch">A</span>' in report
+
+
+def test_call_command_trims_configured_primers(tmp_path, capsys) -> None:
+    reference_path = tmp_path / "reference.fasta"
+    reference_path.write_text(">FLT3\nAAACCCGGGTTT\n", encoding="utf-8")
+
+    r1_path = tmp_path / "sample_R1.fastq"
+    r1_path.write_text(
+        (
+            "@itd-fragment/1\n"
+            "GGGTTTAAACCCGGGCCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIIIIIIIIIIIIIII\n"
+            "@wt-fragment/1\n"
+            "GGGTTTAAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIIIIIIIII\n"
+        ),
+        encoding="utf-8",
+    )
+
+    r2_path = tmp_path / "sample_R2.fastq"
+    r2_path.write_text(
+        (
+            "@itd-fragment/2\n"
+            f"{reverse_complement('AAACCCGGGCCCGGGTTTCGTAAA')}\n"
+            "+\n"
+            "IIIIIIIIIIIIIIIIIIIIIIII\n"
+            "@wt-fragment/2\n"
+            f"{reverse_complement('AAACCCGGGTTTCGTAAA')}\n"
+            "+\n"
+            "IIIIIIIIIIIIIIIIII\n"
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "--reference",
+                str(reference_path),
+                "--r1",
+                str(r1_path),
+                "--r2",
+                str(r2_path),
+                "--forward-primer",
+                "TTT",
+                "--reverse-primer",
+                "CGT",
+                "--min-read-length",
+                "12",
+                "--min-mean-quality",
+                "30",
+            ]
+        )
+        == 0
+    )
+
+    assert capsys.readouterr().out == ""
+
+
+def test_call_command_silently_filters_reads(tmp_path, capsys) -> None:
+    reference_path = tmp_path / "reference.fasta"
+    reference_path.write_text(">FLT3\nAAACCCGGGTTT\n", encoding="utf-8")
+
+    r1_path = tmp_path / "sample_R1.fastq"
+    r1_path.write_text(
+        (
+            "@itd-fragment/1\n"
+            "AAACCCGGGCCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIIIIIIIII\n"
+            "@low-length/1\n"
+            "AAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIII\n"
+            "@low-quality/1\n"
+            "AAACCCGGGTTTAA\n"
+            "+\n"
+            "!!!!!!!!!!!!!!\n"
+        ),
+        encoding="utf-8",
+    )
+
+    r2_path = tmp_path / "sample_R2.fastq"
+    r2_path.write_text(
+        (
+            "@itd-fragment/2\n"
+            "AAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIII\n"
+            "@low-length/2\n"
+            "AAACCCGGGTTT\n"
+            "+\n"
+            "IIIIIIIIIIII\n"
+            "@low-quality/2\n"
+            "AAACCCGGGTTTAA\n"
+            "+\n"
+            "!!!!!!!!!!!!!!\n"
+        ),
+        encoding="utf-8",
+    )
+
+    assert (
+        cli.main(
+            [
+                "--reference",
+                str(reference_path),
+                "--r1",
+                str(r1_path),
+                "--r2",
+                str(r2_path),
+                "--min-read-length",
+                "13",
+                "--min-mean-quality",
+                "30",
+            ]
+        )
+        == 0
+    )
+
+    assert capsys.readouterr().out == ""
 
 
 def test_call_command_rejects_multi_sequence_reference(tmp_path) -> None:
@@ -243,20 +364,24 @@ def test_call_command_writes_unique_support_alignment_html_report(tmp_path, caps
         == 0
     )
 
-    assert "status" in capsys.readouterr().out
+    assert capsys.readouterr().out == ""
     report = report_path.read_text(encoding="utf-8")
     assert "<title>ITDiscover Report</title>" in report
     assert "<h1>ITDiscover Report</h1>" in report
     assert 'class="legend-chip diff"' in report
     assert "tandem sequence" in report
-    assert "inserted base differs from the tandem sequence" in report
-    assert "read/reference base substitution" in report
+    assert "mismatches" in report
+    assert "sky blue" not in report
+    assert "teal green" not in report
+    assert "orange" not in report
     assert "<h2>ITD 1</h2>" in report
+    assert "Insertion Start" not in report
     assert "Support Count" in report
     assert "support pattern count 1" not in report
     assert "mismatches 0" not in report
     assert '<div class="signature">' not in report
     assert "Inserted sequence pileup" in report
+    assert "CCCGGG" in report
     assert '<span class="diff">C</span>' in report
 
 
@@ -430,7 +555,7 @@ def test_call_command_rejects_negative_max_mismatches(capsys) -> None:
     assert "value must not be negative" in capsys.readouterr().err
 
 
-def test_call_command_reports_filter_status_and_reasons(tmp_path, capsys) -> None:
+def test_call_command_filters_without_stdout_report(tmp_path, capsys) -> None:
     reference_path = tmp_path / "reference.fasta"
     reference_path.write_text(">FLT3\nAAACCCGGGTTT\n", encoding="utf-8")
 
@@ -486,10 +611,7 @@ def test_call_command_reports_filter_status_and_reasons(tmp_path, capsys) -> Non
         == 0
     )
 
-    assert capsys.readouterr().out == (
-        "tandem_start\tinsertion_start\tsequence\tsupport_count\tcoverage\tvaf\tstatus\tfilter_reasons\n"
-        "3\t2\tCCCGGG\t1\t2\t0.500000\tFAIL\tLOW_SUPPORT;LOW_VAF\n"
-    )
+    assert capsys.readouterr().out == ""
 
 
 def test_alignment_comparison_classes_ignore_leading_gap_shift() -> None:

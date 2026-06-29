@@ -16,7 +16,7 @@ from .calls import (
 )
 from .fastq import read_paired_fastq
 from .insertions import Alignment
-from .reads import preprocess_fragments
+from .reads import ReadTrimSettings, preprocess_fragments
 
 
 class OptionalDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
@@ -62,6 +62,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--r2",
         required=True,
         help="Reverse-read FASTQ file.",
+    )
+    parser.add_argument(
+        "--forward-primer",
+        help="Optional forward primer sequence to trim from the 5' end of R1 reads.",
+    )
+    parser.add_argument(
+        "--reverse-primer",
+        help="Optional reverse primer sequence to trim from the 3' end of oriented R2 reads.",
     )
     parser.add_argument(
         "--min-read-length",
@@ -122,10 +130,12 @@ def main(argv: list[str] | None = None) -> int:
 def _run_call_command(args: argparse.Namespace) -> int:
     reference = _read_single_sequence_fasta(Path(args.reference))
     fragments = read_paired_fastq(args.r1, args.r2)
+    trimming = _build_trim_settings(args)
     processed_reads = preprocess_fragments(
         fragments,
         min_length=args.min_read_length,
         min_mean_quality=args.min_mean_quality,
+        trimming=trimming,
     )
     alignments = [
         align_read_to_reference(read, reference)
@@ -151,25 +161,6 @@ def _run_call_command(args: argparse.Namespace) -> int:
             min_insert_length=args.min_insert_length,
             filters=filters,
         )
-    print(
-        "tandem_start\tinsertion_start\tsequence\t"
-        "support_count\tcoverage\tvaf\tstatus\tfilter_reasons"
-    )
-    for call in calls:
-        print(
-            "\t".join(
-                [
-                    str(call.itd.tandem_start),
-                    str(call.itd.insertion.start),
-                    call.itd.tandem_sequence,
-                    str(call.support_count),
-                    str(call.coverage),
-                    f"{call.vaf:.6f}",
-                    call.status,
-                    _format_filter_reasons(call),
-                ]
-            )
-        )
     if args.output:
         _write_unique_support_alignment_html_report(
             args.output,
@@ -191,6 +182,21 @@ def _non_negative_int(value: str) -> int:
     if parsed < 0:
         raise argparse.ArgumentTypeError("value must not be negative")
     return parsed
+
+
+def _build_trim_settings(args: argparse.Namespace) -> ReadTrimSettings | None:
+    if not any(
+        getattr(args, field) is not None
+        for field in (
+            "forward_primer",
+            "reverse_primer",
+        )
+    ):
+        return None
+    return ReadTrimSettings(
+        forward_primer=args.forward_primer,
+        reverse_primer=args.reverse_primer,
+    )
 
 
 def _format_filter_reasons(call: ITDCall) -> str:
@@ -275,14 +281,12 @@ def _write_unique_support_alignment_html_report(
       --muted: #5a6875;
       --line: #cfd8df;
       --panel: #f7fafc;
-      --diff-bg: #ffe7a3;
-      --diff-fg: #6e4a00;
       --tandem-bg: #dbeafe;
       --tandem-fg: #12315d;
-      --inserted-bg: #dcfce7;
-      --inserted-fg: #14532d;
-      --insert-mismatch-bg: #ffd6d6;
-      --insert-mismatch-fg: #8a1f1f;
+      --inserted-bg: #d1fae5;
+      --inserted-fg: #065f46;
+      --mismatch-bg: #ffedd5;
+      --mismatch-fg: #9a3412;
     }
     body {
       margin: 24px;
@@ -429,8 +433,8 @@ def _write_unique_support_alignment_html_report(
       color: var(--muted);
     }
     .diff {
-      background: var(--diff-bg);
-      color: var(--diff-fg);
+      background: var(--mismatch-bg);
+      color: var(--mismatch-fg);
       font-weight: 700;
     }
     .tandem-region {
@@ -444,8 +448,8 @@ def _write_unique_support_alignment_html_report(
       font-weight: 700;
     }
     .insert-mismatch {
-      background: var(--insert-mismatch-bg);
-      color: var(--insert-mismatch-fg);
+      background: var(--mismatch-bg);
+      color: var(--mismatch-fg);
       font-weight: 700;
     }
   </style>
@@ -455,8 +459,7 @@ def _write_unique_support_alignment_html_report(
   <div class="legend">
     <span class="legend-item"><span class="legend-chip tandem-region">T</span> tandem sequence</span>
     <span class="legend-item"><span class="legend-chip inserted-region">I</span> inserted sequence</span>
-    <span class="legend-item"><span class="legend-chip insert-mismatch">A</span> inserted base differs from the tandem sequence</span>
-    <span class="legend-item"><span class="legend-chip diff">A</span> read/reference base substitution</span>
+    <span class="legend-item"><span class="legend-chip diff">A</span> mismatches</span>
   </div>
   __SECTIONS__
 </body>
@@ -477,7 +480,6 @@ def _render_html_call_section(
 ) -> str:
     summary = (
         ('Tandem Start', str(call.itd.tandem_start)),
-        ('Insertion Start', str(call.itd.insertion.start)),
         ('Sequence', call.itd.tandem_sequence),
         ('Support Count', str(call.support_count)),
         ('Coverage', str(call.coverage)),
